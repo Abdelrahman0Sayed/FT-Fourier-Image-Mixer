@@ -33,7 +33,7 @@ def draw_rectangle(self, viewers, rect_size, region):
 
                 painter = QPainter(new_pixmap)
 
-                painter.setOpacity(0.4) 
+                painter.setOpacity(0.2) 
                 painter.setBrush(QColor(0, 0, 0, 128))  # Black with alpha 128 (out of 255)
 
                 self.rectSize = int(rect_size)

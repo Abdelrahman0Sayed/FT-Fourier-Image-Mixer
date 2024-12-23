@@ -408,26 +408,37 @@ class ModernWindow(QMainWindow):
                             ftComponents = np.zeros_like(viewer.fftComponents)
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2    
-                            region_size = int(300 * data_percentage)
-                            ftComponents[
-                                center_x - region_size:center_x + region_size,
-                                center_y - region_size:center_y + region_size
-                            ] = viewer.fftComponents[
-                                center_x - region_size:center_x + region_size,
-                                center_y - region_size:center_y + region_size
-                            ]
+
+                            # Calculate region size and ensure it is an integer
+                            region_size_row = int(data_percentage * viewer.fftComponents.shape[0])
+                            region_size_col = int(data_percentage * viewer.fftComponents.shape[1])
+
+                            # Define the slice indices explicitly as integers
+                            start_x = center_x - region_size_row // 2
+                            end_x = center_x + region_size_row // 2
+                            start_y = center_y - region_size_col // 2
+                            end_y = center_y + region_size_col // 2
+
+                            # Use the computed indices for slicing
+                            ftComponents[start_x:end_x, start_y:end_y] = viewer.fftComponents[start_x:end_x, start_y:end_y]
+
                         else:
-                            data_percentage = self.rectSize / 300
-                            ftComponents = np.copy(viewer.fftComponents)
+                            data_percentage = self.rectSize / 300  # Calculate the data percentage
+                            ftComponents = np.copy(viewer.fftComponents)  # Make a copy of the FFT components
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2
-                            region_size = int(300 * data_percentage)
-                            mask = np.ones_like(ftComponents)
-                            mask[
-                                center_x - region_size:center_x + region_size,
-                                center_y - region_size:center_y + region_size
-                            ] = 0
-                            ftComponents = ftComponents * mask
+                            
+                            region_size_row = int(data_percentage * viewer.fftComponents.shape[0])
+                            region_size_col = int(data_percentage * viewer.fftComponents.shape[1])
+
+                            # Define the slice indices explicitly as integers
+                            start_x = center_x - region_size_row // 2
+                            end_x = center_x + region_size_row // 2
+                            start_y = center_y - region_size_col // 2
+                            end_y = center_y + region_size_col // 2
+
+                            # Zero out the desired region using slicing
+                            ftComponents[start_x:end_x, start_y:end_y] = 0
 
                     weight1 = viewer.weight1_slider.value() / 100.0
                     weight2 = viewer.weight2_slider.value() / 100.0
@@ -927,7 +938,7 @@ class ImageViewerWidget(ModernWindow):
             self.weight1_slider.setRange(0, 100)
             self.weight1_slider.setValue(100)
             self.weight2_slider = QSlider(Qt.Horizontal)
-            self.weight2_slider.setRange(-100, 100)
+            self.weight2_slider.setRange(0, 100)
             self.weight2_slider.setValue(100)
             self.weight1_slider.valueChanged.connect(lambda: self.find_parent_window().schedule_real_time_mix())
             self.weight2_slider.valueChanged.connect(lambda: self.find_parent_window().schedule_real_time_mix())

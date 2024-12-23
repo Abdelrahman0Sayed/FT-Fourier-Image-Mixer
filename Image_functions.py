@@ -46,9 +46,9 @@ def loadImage(self, parent):
                 parent.minimumSize = (row, column)
                 print(parent.minimumSize)
 
-            #cv2.resize(grayScaledImage, (row,column))
-            #unify_images(self, parent.viewers, parent.minimumSize)
-            self.imageData = cv2.resize(self.imageData, (600,600))
+            #cv2.resize(grayScaledImage, (column,row))
+            unify_images(self, parent.viewers, parent.minimumSize)
+            #self.imageData = cv2.resize(self.imageData, (600,600))
         
             return grayScaledImage, self.imageData
         
@@ -64,7 +64,7 @@ def unify_images(self, viewers, minimumSize):
         if viewer.imageData is not None:
             # Resize the image using cv2.resize
             target_row, target_column = minimumSize  # Assuming square resizing
-            viewer.imageData = cv2.resize(viewer.imageData, (target_row, target_column))
+            viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
             print(f"Image resized to: {viewer.imageData.shape}")
 
 
