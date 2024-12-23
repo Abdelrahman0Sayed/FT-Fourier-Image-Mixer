@@ -364,8 +364,8 @@ class BeamformingSimulator(QMainWindow):
             y = np.zeros_like(x) + unit.y_pos
         else:
             # Curved array with angle span
+            angle_span = np.pi/3  # 60 degrees default
             radius = unit.curvature_factor * unit.element_spacing * unit.num_elements / 2
-            angle_span = np.radians(unit.steering_angle)  # Use steering angle as angle span for curved
             angles = np.linspace(-angle_span/2, angle_span/2, unit.num_elements)
             x = radius * np.sin(angles) + unit.x_pos
             y = radius * (1 - np.cos(angles)) + unit.y_pos
@@ -376,64 +376,145 @@ class BeamformingSimulator(QMainWindow):
         pattern = np.zeros_like(theta, dtype=np.complex128)
         interference = np.zeros_like(self.X, dtype=np.complex128)
         
-        all_x = []
-        all_y = []
-        
-        # Count total active frequencies across all units for averaging
-        total_freq_count = sum(len(unit.operating_freqs) for unit in self.array_units if unit.enabled)
+        # Normalize operating frequencies relative to the highest frequency
+        max_freq = max([max(unit.operating_freqs) for unit in self.array_units if unit.enabled])
         
         for unit in self.array_units:
             if not unit.enabled:
                 continue
                 
             x, y = self.calculate_array_geometry(unit)
-            all_x.extend(x)
-            all_y.extend(y)
             theta_steer = np.radians(unit.steering_angle)
             
             # Calculate for each frequency
             for freq in unit.operating_freqs:
-                k = 2 * np.pi * freq  # Scale wavenumber by frequency
+                # Normalized wavenumber calculation
+                k = 2 * np.pi * (freq/max_freq)
+                wavelength = 1/freq
                 
-                # Add to beam pattern
+                # Calculate critical distance (near-field to far-field transition)
+                array_size = unit.num_elements * unit.element_spacing
+                critical_distance = 2 * array_size**2 / wavelength
+                
+                # Add to beam pattern (far-field)
                 for i in range(len(theta)):
-                    phase = k * (x * np.sin(theta[i]) + y * np.cos(theta[i]))
-                    steer_phase = k * x * np.sin(theta_steer)
+                    if unit.geometry_type == "Linear":
+                        phase = k * (x * np.sin(theta[i]) + y * np.cos(theta[i]))
+                        steer_phase = k * (x * np.sin(theta_steer))
+                    else:  # Curved array
+                        # Improved phase calculation for curved arrays
+                        r_points = np.sqrt((x * np.sin(theta[i]))**2 + (y * np.cos(theta[i]))**2)
+                        phase = k * r_points
+                        r_steer = np.sqrt((x * np.sin(theta_steer))**2 + (y * np.cos(theta_steer))**2)
+                        steer_phase = k * r_steer
+                    
                     pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
                 
-                # Add to interference map
+                # Calculate interference field with near-field/far-field transitions
                 for i in range(len(x)):
                     r = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
                     phase = k * r
-                    steer_phase = k * x[i] * np.sin(theta_steer)
-                    interference += np.exp(1j * (phase - steer_phase))
+                    
+                    # Improved amplitude calculation
+                    if unit.geometry_type == "Linear":
+                        steer_phase = k * (x[i] * np.sin(theta_steer))
+                    else:
+                        r_steer = np.sqrt((x[i] * np.sin(theta_steer))**2 + (y[i] * np.cos(theta_steer))**2)
+                        steer_phase = k * r_steer
+                    
+                    # Near-field/far-field transition
+                    transition_factor = np.clip(r / critical_distance, 0, 1)
+                    
+                    # Enhanced amplitude calculation
+                    amplitude = np.where(
+                        r < critical_distance,
+                        1.0 / (r + wavelength/10),  # Near-field
+                        1.0 / np.sqrt(r + wavelength/10)  # Far-field
+                    )
+                    
+                    # Frequency-dependent scaling
+                    freq_scale = np.sqrt(freq/max_freq)
+                    
+                    # Add contribution with transition
+                    interference += (amplitude * freq_scale * 
+                                np.exp(1j * (phase - steer_phase)) * 
+                                transition_factor)
         
-        # Normalize by total number of frequencies
-        pattern = np.abs(pattern) / total_freq_count
-        pattern = pattern / np.max(pattern)
+        # Normalize pattern
+        pattern = np.abs(pattern)
+        pattern = pattern / np.max(pattern) if np.max(pattern) > 0 else pattern
         
-        interference = np.abs(interference) / total_freq_count
-        interference = interference / np.max(interference)
+        # Process interference field with improved dynamic range
+        interference_mag = np.abs(interference)
+        interference_max = np.max(interference_mag)
+        
+        if interference_max > 0:
+            # Convert to dB with enhanced dynamic range
+            interference_db = 20 * np.log10(interference_mag / interference_max + 1e-10)
+            interference_db = np.clip(interference_db, -60, 0)
+        else:
+            interference_db = np.zeros_like(interference_mag) - 60
         
         # Update visualizations
         self.update_pattern_plot(theta, pattern)
-        self.update_array_plot(np.array(all_x), np.array(all_y))
-        self.update_interference_plot(self.x_field, self.y_field, interference)
+        self.update_array_plot(
+            np.array([x for unit in self.array_units if unit.enabled 
+                    for x in self.calculate_array_geometry(unit)[0]]),
+            np.array([y for unit in self.array_units if unit.enabled 
+                    for y in self.calculate_array_geometry(unit)[1]])
+        )
+        self.update_interference_plot(self.x_field, self.y_field, interference_db)
 
     def update_interference_plot(self, x, y, interference, cmap='RdBu_r'):
         self.last_interference_data = interference
         self.interference_fig.clear()
         ax = self.interference_fig.add_subplot(111)
-        im = ax.imshow(interference, 
+        
+        # Plot interference pattern
+        im = ax.imshow(interference,
                     extent=[x.min(), x.max(), y.min(), y.max()],
                     origin='lower',
                     cmap=cmap,
-                    aspect='equal')
-        ax.set_title('Interference Pattern', color='white', pad=10)
+                    aspect='equal',
+                    vmin=-60,  # dB range minimum
+                    vmax=0)    # dB range maximum
+        
+        ax.set_title('Interference Pattern (dB)', color='white', pad=10)
         ax.set_xlabel('X Position (λ)', color='white')
         ax.set_ylabel('Y Position (λ)', color='white')
         
-        cbar = self.interference_fig.colorbar(im, label='Normalized Amplitude')
+        # Add colorbar
+        cbar = self.interference_fig.colorbar(im)
+        cbar.ax.set_ylabel('Relative Power (dB)', color='white')
+        cbar.ax.tick_params(colors='white')
+        
+        # Add grid and style
+        ax.grid(True, color='#404040', alpha=0.5, linestyle='--')
+        ax.tick_params(colors='white')
+        ax.set_facecolor('#1e1e1e')
+        
+        self.interference_canvas.draw()
+
+    def update_interference_plot(self, x, y, interference, cmap='RdBu_r'):
+        self.last_interference_data = interference
+        self.interference_fig.clear()
+        ax = self.interference_fig.add_subplot(111)
+        
+        # Plot interference pattern in dB scale
+        im = ax.imshow(interference,
+                    extent=[x.min(), x.max(), y.min(), y.max()],
+                    origin='lower',
+                    cmap=cmap,
+                    aspect='equal',
+                    vmin=-60,  # dB range minimum
+                    vmax=0)    # dB range maximum
+        
+        ax.set_title('Interference Pattern (dB)', color='white', pad=10)
+        ax.set_xlabel('X Position (λ)', color='white')
+        ax.set_ylabel('Y Position (λ)', color='white')
+        
+        # Add colorbar with dB scale
+        cbar = self.interference_fig.colorbar(im, label='Relative Power (dB)')
         cbar.ax.yaxis.label.set_color('white')
         cbar.ax.tick_params(colors='white')
         
@@ -446,18 +527,76 @@ class BeamformingSimulator(QMainWindow):
     def update_pattern_plot(self, theta, pattern):
         self.pattern_fig.clear()
         ax = self.pattern_fig.add_subplot(111, projection='polar')
-        ax.plot(theta, pattern, color='#2196f3', linewidth=2, label='Beam Pattern')
-        ax.set_title('Beam Pattern', color='white', pad=10)
-        ax.grid(True, color='#404040', alpha=0.5)
-        ax.tick_params(colors='white')
         
-        # Add angular markers
-        angles = np.arange(0, 360, 30)
+        # Convert pattern to dB scale
+        pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
+        pattern_db = np.clip(pattern_db, -40, 0)  # Limit dynamic range
+        
+        # Plot main pattern
+        ax.plot(theta, pattern_db + 40, color='#2196f3', linewidth=2, label='Beam Pattern')
+        
+        # Add dB circles and labels
+        db_levels = [-3, -6, -10, -20, -30, -40]
+        for db in db_levels:
+            circle = plt.Circle((0, 0), 40 + db, 
+                            fill=False, 
+                            color='#404040', 
+                            linestyle='--', 
+                            alpha=0.5)
+            ax.add_artist(circle)
+            ax.text(np.pi/4, 40 + db, f'{db} dB', 
+                    color='white', 
+                    ha='left', 
+                    va='bottom')
+        
+        # Add angle markers every 15 degrees
+        angles = np.arange(0, 360, 15)
         ax.set_xticks(np.radians(angles))
         ax.set_xticklabels([f'{int(ang)}°' for ang in angles])
         
-        # Add legend
-        ax.legend(loc='upper right', facecolor='#2d2d2d', edgecolor='#404040')
+        # Calculate and mark beam width
+        half_power = -3  # -3dB points
+        idx_above = np.where(pattern_db > half_power)[0]
+        if len(idx_above) > 0:
+            beam_width = np.abs(np.degrees(theta[idx_above[-1]] - theta[idx_above[0]]))
+            ax.text(0, 45, f'Beam Width: {beam_width:.1f}°', 
+                    color='white',
+                    ha='center',
+                    va='bottom',
+                    bbox=dict(facecolor='#2d2d2d',
+                            alpha=0.8,
+                            edgecolor='#404040'))
+        
+        # Mark steering angles for each unit
+        for unit in self.array_units:
+            if unit.enabled and unit.steering_angle != 0:
+                angle = np.radians(unit.steering_angle)
+                ax.plot([angle, angle], [0, 40], 
+                    color='#ff9800', 
+                    linestyle='--', 
+                    alpha=0.7,
+                    label=f'Steering θ={unit.steering_angle}°')
+        
+        # Customize grid
+        ax.grid(True, color='#404040', alpha=0.3, linestyle=':')
+        
+        # Set plot limits and labels
+        ax.set_ylim(0, 40)  # Adjusted for dB scale
+        ax.set_title('Beam Pattern (dB)', color='white', pad=20)
+        
+        # Enhanced legend
+        legend = ax.legend(
+            loc='upper right',
+            facecolor='#2d2d2d',
+            edgecolor='#404040',
+            framealpha=0.9
+        )
+        for text in legend.get_texts():
+            text.set_color('white')
+        
+        # Style improvements
+        ax.set_facecolor('#1e1e1e')
+        ax.tick_params(colors='white', grid_color='#404040')
         
         self.pattern_canvas.draw()
         
