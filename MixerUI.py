@@ -54,7 +54,7 @@ class ModernWindow(QMainWindow):
     def __init__(self, imageWidget=None , skip_setup_ui=False):
         super().__init__() 
         self.skip_setup_ui = skip_setup_ui  
-        self.minimum_size = (0, 0)
+        self.minimumSize = (0, 0)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.imageWidget = imageWidget
         self.viewers = []
@@ -304,6 +304,7 @@ class ModernWindow(QMainWindow):
 
                             print("Original data shape:", viewer.fftComponents.shape)
                             print("Shifted data shape:", ftComponents.shape)
+                        
                         else:
                             data_percentage = self.rectSize / 300
                             
@@ -328,11 +329,8 @@ class ModernWindow(QMainWindow):
                             print("The Size of the Original Data is: ", viewer.fftComponents.shape)
                             print("The Size of the Data is: ", ftComponents.shape)
 
-
                     weight1 = viewer.weight1_slider.value() / 100.0
                     weight2 = viewer.weight2_slider.value() / 100.0
-
-
 
                     components.append({
                         'ft': ftComponents.copy(),
@@ -360,6 +358,7 @@ class ModernWindow(QMainWindow):
             #self.mix_progress.setValue(80)
             QApplication.processEvents()
             # Cause of the data doesn't apply Shifting of zero by default
+            #mixed_image = np.fft.ifftshift(result)
             mixed_image = np.fft.ifft2(result)
             mixed_image = np.abs(mixed_image)
             mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
@@ -1043,8 +1042,9 @@ class ImageViewerWidget(ModernWindow):
         try:            
             self.originalImageLabel.showLoadingSpinner()
             # Load image
+            parent = self.find_parent_window()
 
-            self.image, self.imageData = loadImage(self)
+            self.image, self.imageData = loadImage(self, parent)
             self.qImage = convert_data_to_image(self.imageData)
             if self.qImage is None or self.imageData is None:
                 raise Exception("Failed to load image")

@@ -1,39 +1,109 @@
-2024-12-20 20:56:32,977 - root - INFO - Starting Application.
-2024-12-20 20:56:38,367 - root - INFO - Loading an Image.
-2024-12-20 20:57:21,975 - root - INFO - Mixing on progress.
-2024-12-20 20:57:26,873 - root - INFO - Mixing on progress.
-2024-12-20 20:57:28,264 - root - INFO - Mixing on progress.
-2024-12-20 21:08:12,769 - root - INFO - Loading an Image.
-2024-12-20 21:09:23,997 - root - INFO - Mixing on progress.
-2024-12-20 21:09:34,608 - root - INFO - Mixing on progress.
-2024-12-20 21:09:41,676 - root - INFO - Mixing on progress.
-2024-12-20 21:11:46,362 - root - INFO - Exiting Application.
-2024-12-20 21:17:53,614 - root - INFO - Starting Application.
-2024-12-20 21:18:02,731 - root - INFO - Loading an Image.
-2024-12-20 21:18:08,326 - root - INFO - Exiting Application.
-2024-12-20 21:20:14,257 - root - INFO - Starting Application.
-2024-12-20 21:20:18,555 - root - INFO - Loading an Image.
-2024-12-20 21:20:35,759 - root - INFO - Exiting Application.
-2024-12-20 21:20:53,751 - root - INFO - Starting Application.
-2024-12-20 21:21:01,336 - root - INFO - Loading an Image.
-2024-12-20 21:21:27,080 - root - INFO - Exiting Application.
-2024-12-20 21:24:00,881 - root - INFO - Starting Application.
-2024-12-20 21:24:04,803 - root - INFO - Loading an Image.
-2024-12-20 21:25:20,788 - root - INFO - Exiting Application.
-2024-12-20 21:25:24,303 - root - INFO - Starting Application.
-2024-12-20 21:25:28,735 - root - INFO - Loading an Image.
-2024-12-20 21:25:39,165 - root - INFO - Exiting Application.
-2024-12-20 21:26:57,634 - root - INFO - Starting Application.
-2024-12-20 21:27:04,035 - root - INFO - Loading an Image.
-2024-12-20 21:28:16,106 - root - INFO - Mixing on progress.
-2024-12-20 21:28:31,992 - root - INFO - Loading an Image.
-2024-12-20 21:29:35,853 - root - INFO - Mixing on progress.
-2024-12-20 21:30:06,367 - root - INFO - Mixing on progress.
-2024-12-20 21:30:58,045 - root - INFO - Exiting Application.
-2024-12-20 21:31:12,862 - root - INFO - Starting Application.
-2024-12-20 21:31:20,563 - root - INFO - Loading an Image.
-2024-12-20 21:31:43,579 - root - INFO - Mixing on progress.
-2024-12-20 21:31:47,391 - root - INFO - Loading an Image.
-2024-12-20 21:31:58,575 - root - INFO - Mixing on progress.
-2024-12-20 21:32:56,177 - root - INFO - Mixing on progress.
-2024-12-20 21:33:15,776 - root - INFO - Exiting Application.
+2024-12-21 14:02:48,205 - root - INFO - Starting Application.
+2024-12-21 14:03:15,588 - root - INFO - Loading an Image.
+2024-12-21 14:03:19,326 - root - INFO - Mixing on progress.
+2024-12-21 14:03:38,871 - root - INFO - Mixing on progress.
+2024-12-21 14:04:02,727 - root - INFO - Mixing on progress.
+2024-12-21 14:04:45,095 - root - INFO - Mixing on progress.
+2024-12-21 14:05:13,282 - root - INFO - Mixing on progress.
+2024-12-21 14:05:47,019 - root - INFO - Exiting Application.
+2024-12-23 11:13:09,473 - root - INFO - Starting Application.
+2024-12-23 11:14:03,420 - root - INFO - Exiting Application.
+2024-12-23 11:14:07,544 - root - INFO - Starting Application.
+2024-12-23 11:14:42,177 - root - INFO - Starting Application.
+2024-12-23 11:16:27,912 - root - INFO - Starting Application.
+2024-12-23 11:17:00,738 - root - INFO - Exiting Application.
+2024-12-23 11:17:13,468 - root - INFO - Starting Application.
+2024-12-23 11:17:58,221 - root - INFO - Exiting Application.
+2024-12-23 12:09:47,908 - root - INFO - Starting Application.
+2024-12-23 12:09:52,093 - root - INFO - Loading an Image.
+2024-12-23 12:09:56,120 - root - INFO - Loading an Image.
+2024-12-23 12:12:29,283 - root - INFO - Mixing on progress.
+2024-12-23 12:27:51,871 - root - INFO - Loading an Image.
+2024-12-23 12:28:00,692 - root - INFO - Loading an Image.
+2024-12-23 12:28:07,545 - root - INFO - Exiting Application.
+2024-12-23 12:31:04,980 - root - INFO - Starting Application.
+2024-12-23 12:31:11,619 - root - INFO - Loading an Image.
+2024-12-23 12:31:13,985 - root - INFO - Loading an Image.
+2024-12-23 12:31:17,633 - root - INFO - Mixing on progress.
+2024-12-23 12:32:22,975 - root - INFO - Mixing on progress.
+2024-12-23 12:32:28,110 - root - INFO - Mixing on progress.
+2024-12-23 12:33:08,891 - root - INFO - Mixing on progress.
+2024-12-23 12:33:36,901 - root - INFO - Mixing on progress.
+2024-12-23 12:34:53,104 - root - INFO - Mixing on progress.
+2024-12-23 12:34:55,765 - root - INFO - Exiting Application.
+2024-12-23 12:36:26,370 - root - INFO - Starting Application.
+2024-12-23 12:36:31,785 - root - INFO - Loading an Image.
+2024-12-23 12:36:33,686 - root - INFO - Loading an Image.
+2024-12-23 12:36:58,341 - root - INFO - Mixing on progress.
+2024-12-23 12:37:08,349 - root - INFO - Mixing on progress.
+2024-12-23 12:37:15,843 - root - INFO - Exiting Application.
+2024-12-23 12:37:31,873 - root - INFO - Starting Application.
+2024-12-23 12:37:36,309 - root - INFO - Loading an Image.
+2024-12-23 12:37:58,318 - root - INFO - Mixing on progress.
+2024-12-23 12:38:01,977 - root - INFO - Mixing on progress.
+2024-12-23 12:38:51,049 - root - INFO - Mixing on progress.
+2024-12-23 12:39:01,264 - root - INFO - Mixing on progress.
+2024-12-23 12:39:36,408 - root - INFO - Exiting Application.
+2024-12-23 14:14:55,725 - root - INFO - Starting Application.
+2024-12-23 14:15:00,310 - root - INFO - Loading an Image.
+2024-12-23 14:15:02,818 - root - INFO - Loading an Image.
+2024-12-23 14:15:08,071 - root - INFO - Mixing on progress.
+2024-12-23 14:15:18,052 - root - INFO - Loading an Image.
+2024-12-23 14:15:20,105 - root - INFO - Mixing on progress.
+2024-12-23 14:15:50,452 - root - INFO - Mixing on progress.
+2024-12-23 14:18:52,473 - root - INFO - Mixing on progress.
+2024-12-23 14:19:26,610 - root - INFO - Mixing on progress.
+2024-12-23 14:19:33,721 - root - INFO - Mixing on progress.
+2024-12-23 14:19:38,555 - root - INFO - Mixing on progress.
+2024-12-23 14:19:44,978 - root - INFO - Mixing on progress.
+2024-12-23 14:19:49,803 - root - INFO - Mixing on progress.
+2024-12-23 14:22:13,784 - root - INFO - Loading an Image.
+2024-12-23 14:22:15,128 - root - INFO - Mixing on progress.
+2024-12-23 14:23:43,058 - root - INFO - Exiting Application.
+2024-12-23 14:24:54,812 - root - INFO - Starting Application.
+2024-12-23 14:24:58,428 - root - INFO - Loading an Image.
+2024-12-23 14:26:16,440 - root - INFO - Mixing on progress.
+2024-12-23 14:26:44,284 - root - INFO - Exiting Application.
+2024-12-23 14:31:48,735 - root - INFO - Starting Application.
+2024-12-23 14:31:55,333 - root - INFO - Loading an Image.
+2024-12-23 14:31:57,520 - root - INFO - Loading an Image.
+2024-12-23 14:31:58,420 - root - INFO - Mixing on progress.
+2024-12-23 14:32:43,667 - root - INFO - Exiting Application.
+2024-12-23 14:38:40,218 - root - INFO - Starting Application.
+2024-12-23 14:39:05,823 - root - INFO - Exiting Application.
+2024-12-23 14:39:08,955 - root - INFO - Starting Application.
+2024-12-23 14:39:14,292 - root - INFO - Loading an Image.
+2024-12-23 14:39:46,690 - root - INFO - Mixing on progress.
+2024-12-23 14:40:05,858 - root - INFO - Exiting Application.
+2024-12-23 14:41:37,714 - root - INFO - Starting Application.
+2024-12-23 14:41:42,199 - root - INFO - Loading an Image.
+2024-12-23 14:41:58,918 - root - INFO - Exiting Application.
+2024-12-23 14:42:10,996 - root - INFO - Starting Application.
+2024-12-23 14:42:16,022 - root - INFO - Loading an Image.
+2024-12-23 14:42:40,607 - root - INFO - Mixing on progress.
+2024-12-23 14:42:49,116 - root - INFO - Mixing on progress.
+2024-12-23 14:43:08,289 - root - INFO - Exiting Application.
+2024-12-23 14:43:11,401 - root - INFO - Starting Application.
+2024-12-23 14:43:15,189 - root - INFO - Loading an Image.
+2024-12-23 14:43:38,106 - root - INFO - Mixing on progress.
+2024-12-23 14:43:59,916 - root - INFO - Mixing on progress.
+2024-12-23 14:44:03,867 - root - INFO - Mixing on progress.
+2024-12-23 14:44:07,075 - root - INFO - Mixing on progress.
+2024-12-23 14:44:10,053 - root - INFO - Mixing on progress.
+2024-12-23 14:44:44,197 - root - INFO - Exiting Application.
+2024-12-23 14:53:25,433 - root - INFO - Starting Application.
+2024-12-23 14:53:31,031 - root - INFO - Loading an Image.
+2024-12-23 14:53:52,017 - root - INFO - Mixing on progress.
+2024-12-23 14:54:07,902 - root - INFO - Mixing on progress.
+2024-12-23 14:54:25,367 - root - INFO - Mixing on progress.
+2024-12-23 14:54:28,055 - root - INFO - Mixing on progress.
+2024-12-23 14:54:47,817 - root - INFO - Exiting Application.
+2024-12-23 14:54:52,713 - root - INFO - Starting Application.
+2024-12-23 14:55:04,295 - root - INFO - Loading an Image.
+2024-12-23 14:55:24,721 - root - INFO - Mixing on progress.
+2024-12-23 14:55:38,718 - root - INFO - Exiting Application.
+2024-12-23 14:55:42,111 - root - INFO - Starting Application.
+2024-12-23 14:55:52,837 - root - INFO - Loading an Image.
+2024-12-23 14:56:07,318 - root - INFO - Mixing on progress.
+2024-12-23 14:56:27,299 - root - INFO - Mixing on progress.
+2024-12-23 14:56:29,651 - root - INFO - Exiting Application.

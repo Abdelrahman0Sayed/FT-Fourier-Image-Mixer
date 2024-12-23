@@ -42,7 +42,7 @@ def draw_rectangle(self, viewers, rect_size, region):
                 painter.drawRect(inner_rect)
 
                 # Draw the outer region with higher opacity
-                painter.setOpacity(0.7) 
+                painter.setOpacity(0.8) 
                 painter.setBrush(QColor(0, 0, 0, 230))  # Black with alpha 230 (out of 255)
 
                 # Create a path for the outer region with a hole in the middle

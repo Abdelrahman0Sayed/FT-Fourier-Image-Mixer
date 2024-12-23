@@ -24,7 +24,7 @@ from PyQt5.QtGui import *
 from PIL import Image, ImageQt
 
 
-def loadImage(self):
+def loadImage(self, parent):
     try:
         filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
         if filePath:
@@ -34,29 +34,37 @@ def loadImage(self):
             # Convert to grayscale
             grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
             
+            row, column = grayScaledImage.shape
+            print(row, column)
+            print(parent.minimumSize)
 
-            unify_images(self, self.viewers)
+            # This means that's the first image 
+            if parent.minimumSize == (0, 0):
+                parent.minimumSize = (row, column)
+
+            if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
+                parent.minimumSize = (row, column)
+                print(parent.minimumSize)
+
+            #cv2.resize(grayScaledImage, (row,column))
+            #unify_images(self, parent.viewers, parent.minimumSize)
             self.imageData = cv2.resize(self.imageData, (600,600))
         
             return grayScaledImage, self.imageData
+        
         return 
     except Exception as e:
         print(f"Error: {e}")
 
 
 
-
-
-
-
-
-def unify_images(self, viewers):
+def unify_images(self, viewers, minimumSize):
     print("Unifying Images")
     for viewer in viewers:
         if viewer.imageData is not None:
             # Resize the image using cv2.resize
-            target_size = (self.minimum_size, self.minimum_size)  # Assuming square resizing
-            viewer.imageData = cv2.resize(viewer.imageData, target_size)
+            target_row, target_column = minimumSize  # Assuming square resizing
+            viewer.imageData = cv2.resize(viewer.imageData, (target_row, target_column))
             print(f"Image resized to: {viewer.imageData.shape}")
 
 
@@ -116,8 +124,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         # Take the Magnitude as log scale
         
         
-        #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-        ftMagnitudes = self.ftMagnitudes
+        ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+        #ftMagnitudes = self.ftMagnitudes
 
         ftLog = 15 * np.log(ftMagnitudes + 1e-10).astype(np.uint8)
         ftNormalized = ftLog / ftLog.max() * 255
@@ -141,8 +149,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
         
         
-        #ftPhases = np.fft.fftshift(self.ftPhase)
-        ftPhases = self.ftPhase
+        ftPhases = np.fft.fftshift(self.ftPhase)
+        #ftPhases = self.ftPhase
 
         f_wrapped = np.angle(np.exp(1j * ftPhases))  
         f_normalized = (f_wrapped + np.pi) / (2 * np.pi) * 255
@@ -163,8 +171,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         
         # Normalization and Adjustment for visualization
         
-        #ftReals = np.fft.fftshift(self.ftReal)
-        ftReals = self.ftReal
+        ftReals = np.fft.fftshift(self.ftReal)
+        #ftReals = self.ftReal
         ftNormalized = np.abs(ftReals)
         
         
@@ -181,9 +189,9 @@ def displayFrequencyComponent(self, PlottedComponent):
         self.ftComponentLabel.setPixmap(pixmap)
     elif PlottedComponent == "FT Imaginary":
         
-        #ftImaginaries = np.fft.fftshift(self.ftImaginary)
-        frImaginaries = self.ftImaginary
-        ftNormalized = np.abs(frImaginaries)
+        ftImaginaries = np.fft.fftshift(self.ftImaginary)
+        #ftImaginaries = self.ftImaginary
+        ftNormalized = np.abs(ftImaginaries)
         
         
         pil_image = Image.fromarray(np.uint8(ftNormalized)) 
