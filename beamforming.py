@@ -24,8 +24,8 @@ class ArrayUnit:
     element_spacing: float
     steering_angle: float
     geometry_type: str
-    curvature_factor: float  # Changed from curvature
-    operating_freqs: List[float]  # Changed from single freq to list
+    curvature_factor: float 
+    operating_freqs: List[float]
     enabled: bool = True
 
 class ScenarioType(Enum):
@@ -41,6 +41,7 @@ class ModernButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         style.use('dark_background')
         mpl.rcParams.update(PLOT_STYLE)
+
 
 class BeamformingSimulator(QMainWindow):
     def __init__(self):
@@ -528,75 +529,113 @@ class BeamformingSimulator(QMainWindow):
         self.pattern_fig.clear()
         ax = self.pattern_fig.add_subplot(111, projection='polar')
         
-        # Convert pattern to dB scale
+        # Convert to dB with better dynamic range
         pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
-        pattern_db = np.clip(pattern_db, -40, 0)  # Limit dynamic range
+        pattern_db = np.clip(pattern_db, -40, 0)
+        normalized_pattern = pattern_db + 40  # Shift to positive values
         
-        # Plot main pattern
-        ax.plot(theta, pattern_db + 40, color='#2196f3', linewidth=2, label='Beam Pattern')
+        # Main beam pattern with gradient color
+        points = ax.plot(theta, normalized_pattern, linewidth=3, 
+                        color='#2196f3', label='Main Beam')
         
-        # Add dB circles and labels
+        # Fill regions with transparency for better visualization
+        main_lobe_mask = pattern_db >= -3
+        side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
+        
+        ax.fill_between(theta, 0, normalized_pattern, 
+                    where=main_lobe_mask,
+                    color='#2196f3', alpha=0.3, 
+                    label='Main Lobe (-3dB)')
+        ax.fill_between(theta, 0, normalized_pattern, 
+                    where=side_lobe_mask,
+                    color='#ff9800', alpha=0.2, 
+                    label='Side Lobes')
+        
+        # Add dB circles with clear annotations
         db_levels = [-3, -6, -10, -20, -30, -40]
         for db in db_levels:
-            circle = plt.Circle((0, 0), 40 + db, 
-                            fill=False, 
-                            color='#404040', 
-                            linestyle='--', 
-                            alpha=0.5)
+            circle = plt.Circle((0, 0), 40 + db,
+                            fill=False,
+                            color='white',
+                            linestyle='--',
+                            alpha=0.3)
             ax.add_artist(circle)
-            ax.text(np.pi/4, 40 + db, f'{db} dB', 
-                    color='white', 
-                    ha='left', 
-                    va='bottom')
+
+            if db in [-3, -10, -20]:
+                ax.text(np.pi/4, 40 + db,
+                    f'{db} dB',
+                    color='white',
+                    ha='left',
+                    va='bottom',
+                    bbox=dict(facecolor='#2d2d2d',
+                            alpha=0.7,
+                            edgecolor='none'))
         
-        # Add angle markers every 15 degrees
-        angles = np.arange(0, 360, 15)
-        ax.set_xticks(np.radians(angles))
-        ax.set_xticklabels([f'{int(ang)}°' for ang in angles])
-        
-        # Calculate and mark beam width
-        half_power = -3  # -3dB points
+        #display key metrics
+        half_power = -3
         idx_above = np.where(pattern_db > half_power)[0]
         if len(idx_above) > 0:
             beam_width = np.abs(np.degrees(theta[idx_above[-1]] - theta[idx_above[0]]))
-            ax.text(0, 45, f'Beam Width: {beam_width:.1f}°', 
+            metrics_text = (
+                f'Key Metrics:\n'
+                f'• Beam Width]: {beam_width:.1f}°\n'
+                f'• Directivity: {10*np.log10(1/beam_width*180/np.pi):.1f} dB'
+            )
+            ax.text(np.pi/2, 45, metrics_text,
                     color='white',
-                    ha='center',
-                    va='bottom',
+                    ha='left',
+                    va='top',
                     bbox=dict(facecolor='#2d2d2d',
-                            alpha=0.8,
-                            edgecolor='#404040'))
+                            alpha=0.9,
+                            edgecolor='#404040',
+                            boxstyle='round,pad=0.5'))
+            
+            # Add beam width annotation
+            ax.annotate('',
+                    xy=(theta[idx_above[0]], normalized_pattern[idx_above[0]]),
+                    xytext=(theta[idx_above[-1]], normalized_pattern[idx_above[-1]]),
+                    arrowprops=dict(arrowstyle='<->',
+                                    color='white',
+                                    alpha=0.7))
         
-        # Mark steering angles for each unit
+        # Enhanced angle markers
+        angles = np.arange(0, 360, 15)
+        ax.set_xticks(np.radians(angles))
+        ax.set_xticklabels([f'{int(ang)}°' for ang in angles],
+                        fontsize=10,
+                        color='white')
+        
+        # Mark steering angles with clear indicators
         for unit in self.array_units:
             if unit.enabled and unit.steering_angle != 0:
                 angle = np.radians(unit.steering_angle)
-                ax.plot([angle, angle], [0, 40], 
-                    color='#ff9800', 
-                    linestyle='--', 
+                # Add steering line
+                ax.plot([angle, angle], [0, 40],
+                    color='#ff9800',
+                    linestyle='--',
+                    linewidth=2,
                     alpha=0.7,
-                    label=f'Steering θ={unit.steering_angle}°')
+                    label=f'Steering {unit.steering_angle}°')
+                # Add steering arc indicator
+                arc = np.linspace(angle-np.pi/12, angle+np.pi/12, 100)
+                ax.plot(arc, np.ones_like(arc)*40,
+                    color='#ff9800',
+                    alpha=0.3)
         
-        # Customize grid
-        ax.grid(True, color='#404040', alpha=0.3, linestyle=':')
+        # Enhanced grid with better visibility
+        ax.grid(True, color='white', alpha=0.1, linestyle=':')
         
-        # Set plot limits and labels
-        ax.set_ylim(0, 40)  # Adjusted for dB scale
-        ax.set_title('Beam Pattern (dB)', color='white', pad=20)
-        
-        # Enhanced legend
-        legend = ax.legend(
-            loc='upper right',
-            facecolor='#2d2d2d',
-            edgecolor='#404040',
-            framealpha=0.9
-        )
-        for text in legend.get_texts():
-            text.set_color('white')
-        
-        # Style improvements
+        # Set plot limits and title
+        ax.set_ylim(0, 45)
+        ax.set_title('Beam Pattern Analysis',
+                    color='white',
+                    pad=20,
+                    fontsize=14,
+                    fontweight='bold')
+    
+        # Final styling
         ax.set_facecolor('#1e1e1e')
-        ax.tick_params(colors='white', grid_color='#404040')
+        ax.tick_params(colors='white')
         
         self.pattern_canvas.draw()
         
