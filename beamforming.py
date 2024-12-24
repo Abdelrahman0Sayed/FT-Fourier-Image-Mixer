@@ -52,8 +52,8 @@ class BeamformingSimulator(QMainWindow):
         self.editing_mode = False
         
         # Initialize field variables
-        self.x_field = np.linspace(-10, 10, 200)
-        self.y_field = np.linspace(0, 20, 200)
+        self.x_field = np.linspace(-30, 30, 200)
+        self.y_field = np.linspace(-30, 30, 200)
         self.X, self.Y = np.meshgrid(self.x_field, self.y_field)
         
         # Create central widget and layout
@@ -838,17 +838,17 @@ class BeamformingSimulator(QMainWindow):
 
     def setup_preset_scenarios(self):
         self.scenarios = {
-            ScenarioType.FiveG: {
+                        ScenarioType.FiveG: {
                 "description": "5G Beamforming Array (28 GHz)",
                 "params": {
                     "units": [
                         {
-                            "num_elements": 64,
+                            "num_elements": 16,
                             "element_spacing": 0.5,
                             "steering_angle": 0,
                             "geometry_type": "Linear",
                             "curvature_factor": 1.0,
-                            "operating_freqs": [28000],
+                            "operating_freqs": [2.8],
                             "x_pos": 0,
                             "y_pos": 0,
                             
@@ -861,12 +861,12 @@ class BeamformingSimulator(QMainWindow):
                 "params": {
                     "units": [
                         {
-                            "num_elements": 128,
-                            "element_spacing": 0.25,
+                            "num_elements": 16,
+                            "element_spacing": .06,
                             "steering_angle": 0,
-                            "geometry_type": "Curved",
                             "curvature_factor": 1.5,
-                            "operating_freqs": [5],
+                            "operating_freqs": [0.5],
+                            "geometry_type": "Linear",
                             "x_pos": 0,
                             "y_pos": 0,
                             
@@ -875,28 +875,17 @@ class BeamformingSimulator(QMainWindow):
                 }
             },
             ScenarioType.ABLATION: {
-                "description": "Focused Ultrasound Ablation (1 MHz)",
+                "description": "Medical Ultrasound Scanner (5 MHz)",
                 "params": {
                     "units": [
                         {
-                            "num_elements": 32,
-                            "element_spacing": 1.0,
-                            "steering_angle": -30,
+                            "num_elements": 20,
+                            "element_spacing": 0.25,
+                            "steering_angle": 0,
                             "geometry_type": "Linear",
-                            "curvature_factor": 1.0,
-                            "operating_freqs": [1],
-                            "x_pos": -5,
-                            "y_pos": 0,
-                            
-                        },
-                        {
-                            "num_elements": 32,
-                            "element_spacing": 1.0,
-                            "steering_angle": 30,
-                            "geometry_type": "Linear",
-                            "curvature_factor": 1.0,
-                            "operating_freqs": [1],
-                            "x_pos": 5,
+                            "curvature_factor": 1.5,
+                            "operating_freqs": [5],
+                            "x_pos": 0,
                             "y_pos": 0,
                             
                         }

@@ -124,8 +124,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         # Take the Magnitude as log scale
         
         
-        ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-        #ftMagnitudes = self.ftMagnitudes
+        #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+        ftMagnitudes = self.ftMagnitudes
 
         ftLog = 15 * np.log(ftMagnitudes + 1e-10).astype(np.uint8)
         ftNormalized = ftLog / ftLog.max() * 255
@@ -149,8 +149,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
         
         
-        ftPhases = np.fft.fftshift(self.ftPhase)
-        #ftPhases = self.ftPhase
+        #ftPhases = np.fft.fftshift(self.ftPhase)
+        ftPhases = self.ftPhase
 
         f_wrapped = np.angle(np.exp(1j * ftPhases))  
         f_normalized = (f_wrapped + np.pi) / (2 * np.pi) * 255
@@ -171,8 +171,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         
         # Normalization and Adjustment for visualization
         
-        ftReals = np.fft.fftshift(self.ftReal)
-        #ftReals = self.ftReal
+        #ftReals = np.fft.fftshift(self.ftReal)
+        ftReals = self.ftReal
         ftNormalized = np.abs(ftReals)
         
         
@@ -189,8 +189,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         self.ftComponentLabel.setPixmap(pixmap)
     elif PlottedComponent == "FT Imaginary":
         
-        ftImaginaries = np.fft.fftshift(self.ftImaginary)
-        #ftImaginaries = self.ftImaginary
+        #ftImaginaries = np.fft.fftshift(self.ftImaginary)
+        ftImaginaries = self.ftImaginary
         ftNormalized = np.abs(ftImaginaries)
         
         
@@ -225,7 +225,7 @@ def convert_from_pil_to_qimage(pilImage):
 
 def convet_mixed_to_qImage(imageData):
     try:
-        # Convert the image data to a QImage
+        # Convert the image data to a QImage    
         height, width, channel = imageData.shape
         bytesPerLine = 3 * width
         

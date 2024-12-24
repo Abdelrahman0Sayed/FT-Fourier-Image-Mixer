@@ -135,6 +135,7 @@ class ModernWindow(QMainWindow):
 
             #self.mix_progress.setValue(80)
             # Process result
+            
             mixed_image = np.fft.ifft2(result)
             mixed_image = np.abs(mixed_image)
             mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
@@ -522,7 +523,7 @@ class ModernWindow(QMainWindow):
         controls_layout.setSpacing(4)
         for btn_data in [(" ⚊ ", self.showMinimized), 
                 (" ☐ ", self.toggleMaximized),
-                ("✕     انطر ابلكاش", self.logExit)]:
+                ("✕", self.logExit)]:
             btn = QPushButton(btn_data[0])
             btn.setFixedSize(124, 24)
             btn.clicked.connect(btn_data[1])
@@ -702,7 +703,12 @@ class ModernWindow(QMainWindow):
 
     def _on_region_size_changed(self):
         draw_rectangle(self, self.viewers, self.region_size.value(), self.region)
-        self.real_time_mix()
+        parent = self
+        while parent and not isinstance(parent, ModernWindow):  
+            parent = parent.parent()
+        if parent:
+            # Schedule the real-time mix instead of calling it directly
+            parent.schedule_real_time_mix()
 
     def changeRegion(self, region):
         self.region = region
@@ -987,7 +993,7 @@ class ImageViewerWidget(ModernWindow):
         delta_x = event.pos().x() - self.last_pos.x()
         delta_y = event.pos().y() - self.last_pos.y()
         # Adjust brightness and contrast based on mouse movement
-        newImageData = self.adjust_brightness_contrast(delta_y / 100, delta_x / 100)
+        newImageData = self.adjust_brightness_contrast(delta_x / 10, delta_y / 10)
         # Update last position for the next event
         self.last_pos = event.pos()
 
@@ -998,18 +1004,22 @@ class ImageViewerWidget(ModernWindow):
         if event.button() == Qt.LeftButton:
             self.dragging = False
 
-    def adjust_brightness_contrast(self, brightness_delta, contrast_delta):
-        # Update brightness and contrast values
-        self.brightness = max(min(self.brightness + brightness_delta, 1), -1)
-        self.contrast = max(min(self.contrast + contrast_delta, 3), 0.1)
+    def adjust_brightness_contrast(self, delta_x, delta_y):
+        
+        brightness_step = 0.1
+        contrast_step = 0.1
+
+        # X for contrast, Y for brightness
+        self.brightness = np.clip(self.brightness + delta_y * brightness_step, -50, 200)
+        self.contrast = np.clip(self.contrast + delta_x * contrast_step, 0.5, 2)
 
         print(f"Brightness: {self.brightness}, Contrast: {self.contrast}")
 
         if self.imageData is not None:
             print("Adjusting image brightness and contrast...")
-
+            
             # Apply contrast and brightness adjustments
-            adjusted_image = self.imageData * self.contrast + (self.brightness * 255)
+            adjusted_image = cv2.convertScaleAbs(self.imageData, alpha=self.contrast, beta=self.brightness)
             adjusted_image = np.clip(adjusted_image, 0, 255).astype(np.uint8)
 
             # Convert NumPy array back to QImage
