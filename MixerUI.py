@@ -114,7 +114,7 @@ class ModernWindow(QMainWindow):
             if not output_viewer or not output_viewer.originalImageLabel:
                 return
 
-            #self.mix_progress.setValue(10)
+            self.mix_progress.setValue(10)
 
             # Collect components
             components = []
@@ -125,7 +125,7 @@ class ModernWindow(QMainWindow):
                     pass
             if not components:
                 return
-            #self.mix_progress.setValue(60)
+            self.mix_progress.setValue(20)
             # Perform mixing
             mix_type = self.mix_type.currentText()
             if mix_type == "Magnitude/Phase":
@@ -133,28 +133,31 @@ class ModernWindow(QMainWindow):
             else:
                 result = mix_real_imaginary(self, components)
 
-            #self.mix_progress.setValue(80)
+            self.mix_progress.setValue(40)
             # Process result
             
             mixed_image = np.fft.ifft2(result)
             mixed_image = np.abs(mixed_image)
             mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
             mixed_image = mixed_image.astype(np.uint8)
-            #self.mix_progress.setValue(90)
+            
+            self.mix_progress.setValue(70)
 
             # Update display
             qImage = convet_mixed_to_qImage(mixed_image)
             if qImage and output_viewer and output_viewer.originalImageLabel:
                 pixmap = QPixmap.fromImage(qImage)
-                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.KeepAspectRatio))
+                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.IgnoreAspectRatio))
 
-            #self.mix_progress.setValue(100)
+            self.mix_progress.setValue(100)
 
         except Exception as e:
             print(f"Error during real-time mixing: {str(e)}")
             if hasattr(self, 'show_error'):
                 self.show_error(f"Mixing failed: {str(e)}")
-                
+
+
+
     def _setup_theme(self):
         self.setStyleSheet(f"""
             QMainWindow {{
@@ -292,7 +295,7 @@ class ModernWindow(QMainWindow):
                             center_y = viewer.fftComponents.shape[1] // 2    
                             region_size = int(300 * data_percentage)
 
-                            print(f"Region size: {region_size}")
+                            
 
                             # Copy only inner region from shifted data, rest remains zero
                             ftComponents[
@@ -303,9 +306,6 @@ class ModernWindow(QMainWindow):
                                 center_y - region_size:center_y + region_size
                             ]
 
-                            print("Original data shape:", viewer.fftComponents.shape)
-                            print("Shifted data shape:", ftComponents.shape)
-                        
                         else:
                             data_percentage = self.rectSize / 300
                             
@@ -330,15 +330,13 @@ class ModernWindow(QMainWindow):
                             print("The Size of the Original Data is: ", viewer.fftComponents.shape)
                             print("The Size of the Data is: ", ftComponents.shape)
 
-                    weight1 = viewer.weight1_slider.value() / 100.0
-                    weight2 = viewer.weight2_slider.value() / 100.0
-
+                    weight = viewer.weight1_slider.value() / 100.0
                     components.append({
                         'ft': ftComponents.copy(),
-                        'weight1': weight1,
-                        'weight2': weight2
+                        'weight': weight,
+                        'type' : viewer.component_selector.currentText()
                     })
-                    print(f"Added component with weights: {weight1}, {weight2} and Size: {viewer.imageData.shape}")
+
                     
             # Update progress after components collected
             #self.mix_progress.setValue(60)
@@ -346,14 +344,13 @@ class ModernWindow(QMainWindow):
             if not components:
                 self.show_error("Please load images before mixing!")
                 return
+            
+
             # Get mixing type and perform mix
             mix_type = self.mix_type.currentText()
             if mix_type == "Magnitude/Phase":
-                print("We Should Apply Magnitude / Phase Mixing")
-                result = mix_magnitude_phase(self, components)
-                print(result.shape)
+                result = mix_magnitude_phase(self, components, )
             else:
-                print("We Should Apply Real / Imaginary Mixing")
                 result =  mix_real_imaginary(self, components)
             
             #self.mix_progress.setValue(80)
@@ -373,8 +370,8 @@ class ModernWindow(QMainWindow):
 
             if output_viewer and output_viewer.originalImageLabel:
                 pixmap = QPixmap.fromImage(qImage)
-                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300 ,Qt.KeepAspectRatio))
-            #self.mix_progress.setValue(100)
+                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300 ,Qt.IgnoreAspectRatio))
+            self.mix_progress.setValue(100)
             QApplication.processEvents()
 
         except Exception as e:
@@ -441,13 +438,12 @@ class ModernWindow(QMainWindow):
                             # Zero out the desired region using slicing
                             ftComponents[start_x:end_x, start_y:end_y] = 0
 
-                    weight1 = viewer.weight1_slider.value() / 100.0
-                    weight2 = viewer.weight2_slider.value() / 100.0
+                    weight = viewer.weight1_slider.value() / 100.0
 
                     components.append({
                         'ft': ftComponents.copy(),
-                        'weight1': weight1,
-                        'weight2': weight2
+                        'weight': weight,
+                        'type': viewer.component_selector.currentText()
                     })
                     #self.mix_progress.setValue(20 + (i * 15))
                     QApplication.processEvents()
@@ -481,7 +477,7 @@ class ModernWindow(QMainWindow):
             qImage = convet_mixed_to_qImage(mixed_image)
             if qImage and output_viewer and output_viewer.originalImageLabel:
                 pixmap = QPixmap.fromImage(qImage)
-                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.KeepAspectRatio))
+                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.IgnoreAspectRatio))
 
             #self.mix_progress.setValue(100)
             QApplication.processEvents()
@@ -587,9 +583,11 @@ class ModernWindow(QMainWindow):
         region_controls_layout = QHBoxLayout(region_controls)
         self.inner_region = QRadioButton("Inner")
         self.outer_region = QRadioButton("Outer")
+
         self.inner_region.setChecked(True)
         self.inner_region.clicked.connect(lambda: self.changeRegion("Inner"))
         self.outer_region.clicked.connect(lambda: self.changeRegion("Outer"))
+        
         self.region = "Inner"
         self.region_size = QSlider(Qt.Horizontal)
         self.region_size.setRange(1, 300)
@@ -625,6 +623,7 @@ class ModernWindow(QMainWindow):
         output_label = QLabel("Mix to Output:")
         self.output_selector = QComboBox()
         self.output_selector.addItems(["Output 1", "Output 2"])
+        self.output_selector.currentIndexChanged.connect(self.real_time_mix)
         output_selector_layout.addWidget(output_label)
         output_selector_layout.addWidget(self.output_selector)
         # Add widgets to layout
@@ -633,12 +632,6 @@ class ModernWindow(QMainWindow):
         right_layout.addWidget(mixing_type_group)
         self.region_size.valueChanged.connect(self._on_region_size_changed)
         # Mixing controls
-        mixing_group = QGroupBox("Mixing Controls")
-        mixing_layout = QHBoxLayout(mixing_group)
-        mix_controls = QWidget()
-        mix_controls_layout = QVBoxLayout(mix_controls)
-        mix_controls_layout.setContentsMargins(5, 5, 5, 5)
-        mix_controls_layout.setSpacing(8)  # Add spacing between elements
         # Add mix button and progress bar
         self.mix_button = QPushButton("Start Mix")
         self.mix_button.setMinimumWidth(100)
@@ -674,11 +667,7 @@ class ModernWindow(QMainWindow):
         # Timer for controlling progress updates
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_progress)
-        mix_controls_layout.addWidget(self.mix_button)
-        mix_controls_layout.addWidget(self.mix_progress)
-        mixing_layout.addWidget(mix_controls)
-        # Add to right panel layout
-        right_layout.addWidget(mixing_group)
+        #mix_controls_layout.addWidget(self.mix_button)
         self.setCentralWidget(self.container)
         self._setup_connection()
 
@@ -703,21 +692,33 @@ class ModernWindow(QMainWindow):
 
     def _on_region_size_changed(self):
         draw_rectangle(self, self.viewers, self.region_size.value(), self.region)
-        parent = self
-        while parent and not isinstance(parent, ModernWindow):  
-            parent = parent.parent()
-        if parent:
-            # Schedule the real-time mix instead of calling it directly
-            parent.schedule_real_time_mix()
+        self.real_time_mix()
 
     def changeRegion(self, region):
+        self.real_time_mix()
         self.region = region
+        if region == "Inner":
+            self.outer_region.setChecked(False)
+            self.inner_region.setChecked(True)
+        else:
+            self.inner_region.setChecked(False)
+            self.outer_region.setChecked(True)
         draw_rectangle(self, self.viewers , self.region_size.value() ,self.region)
+        
 
     def update_mixing_mode(self, index):
         mode = self.mix_type.currentText()
-        for viewer in self.viewers:
-            viewer.update_weight_labels(mode)
+        if mode == "Magnitude/Phase":
+            # Make Component Selector be just FT Magnitude and FT Phase
+            for viewer in self.viewers:
+                viewer.component_selector.clear()
+                viewer.component_selector.addItems(['FT Magnitude', 'FT Phase'])
+        else:
+            # Make Component Selector be just FT Real and FT Imaginary
+            for viewer in self.viewers:
+                viewer.component_selector.clear()
+                viewer.component_selector.addItems(['FT Real', 'FT Imaginary'])
+
         self.real_time_mix()
 
     def toggleMaximized(self):
@@ -898,6 +899,7 @@ class ImageViewerWidget(ModernWindow):
                 }
             """)
             self.originalImageLabel.on_double_click = self.apply_effect  # Connect double-click event
+            
             original_section.addWidget(original_label)
             original_section.addWidget(self.originalImageLabel)
             displays_layout.addLayout(original_section)
@@ -908,9 +910,7 @@ class ImageViewerWidget(ModernWindow):
             self.component_selector = QComboBox()
             self.component_selector.addItems([
                 'FT Magnitude',
-                'FT Phase',
-                'FT Real',
-                'FT Imaginary'
+                'FT Phase'
             ])
             self.component_selector.setToolTip("Select which Fourier component to view")
             self.component_selector.currentIndexChanged.connect(lambda: displayFrequencyComponent(self, self.component_selector.currentText()))
@@ -938,20 +938,14 @@ class ImageViewerWidget(ModernWindow):
             weights_layout = QVBoxLayout(self.weights_group)
             weight_widget = QWidget()
             weight_layout = QHBoxLayout(weight_widget)
-            self.weight1_label = QLabel("Magnitude:")
-            self.weight2_label = QLabel("Phase:")
+
             self.weight1_slider = QSlider(Qt.Horizontal)
             self.weight1_slider.setRange(0, 100)
             self.weight1_slider.setValue(100)
-            self.weight2_slider = QSlider(Qt.Horizontal)
-            self.weight2_slider.setRange(0, 100)
-            self.weight2_slider.setValue(100)
+
             self.weight1_slider.valueChanged.connect(lambda: self.find_parent_window().schedule_real_time_mix())
-            self.weight2_slider.valueChanged.connect(lambda: self.find_parent_window().schedule_real_time_mix())
-            weight_layout.addWidget(self.weight1_label)
             weight_layout.addWidget(self.weight1_slider)
-            weight_layout.addWidget(self.weight2_label)
-            weight_layout.addWidget(self.weight2_slider)
+
             weights_layout.addWidget(weight_widget)
             layout.addWidget(self.weights_group)
 
@@ -1005,9 +999,8 @@ class ImageViewerWidget(ModernWindow):
             self.dragging = False
 
     def adjust_brightness_contrast(self, delta_x, delta_y):
-        
-        brightness_step = 0.1
-        contrast_step = 0.1
+        brightness_step = 0.4
+        contrast_step = 0.4
 
         # X for contrast, Y for brightness
         self.brightness = np.clip(self.brightness + delta_y * brightness_step, -50, 200)
@@ -1034,7 +1027,7 @@ class ImageViewerWidget(ModernWindow):
             pixmap_image = QPixmap.fromImage(q_image)
             label_width = self.originalImageLabel.width()
             label_height = self.originalImageLabel.height()
-            pixmap_image = pixmap_image.scaled(label_width, label_height, Qt.KeepAspectRatio)
+            pixmap_image = pixmap_image.scaled(label_width, label_height, Qt.IgnoreAspectRatio)
             self.originalImageLabel.setPixmap(pixmap_image)
 
             return adjusted_image
@@ -1077,14 +1070,16 @@ class ImageViewerWidget(ModernWindow):
             pixmapImage = QPixmap.fromImage(self.qImage)
             label_height = int(self.originalImageLabel.height())
             label_width = int(self.originalImageLabel.width())
+            print(label_height, label_width)
             pixmapImage = pixmapImage.scaled(
                 label_width, label_height,
-                aspectRatioMode=Qt.AspectRatioMode.KeepAspectRatio
+                aspectRatioMode=Qt.AspectRatioMode.IgnoreAspectRatio
             )
             self.originalImageLabel.setPixmap(pixmapImage)
             
             imageFourierTransform(self, self.imageData)                
             displayFrequencyComponent(self, "FT Magnitude")
+            parent.real_time_mix()
             
 
         except Exception as e:
@@ -1094,13 +1089,6 @@ class ImageViewerWidget(ModernWindow):
         finally:
             self.originalImageLabel.hideLoadingSpinner()
 
-    def update_weight_labels(self, mode):
-        if mode == "Magnitude/Phase":
-            self.weight1_label.setText("Magnitude:")
-            self.weight2_label.setText("Phase:")
-        else:
-            self.weight1_label.setText("Real:")
-            self.weight2_label.setText("Imaginary:")
 
     def _setup_animations(self):
         self.highlight_animation = QPropertyAnimation(self, b"styleSheet")
@@ -1135,7 +1123,6 @@ class ImageViewerWidget(ModernWindow):
         if not self.is_output:
             self.ftComponentLabel.clear()
             self.weight1_slider.setValue(50)
-            self.weight2_slider.setValue(50)
 
     def _setup_zoom_controls(self):
         zoom_layout = QHBoxLayout()
@@ -1174,7 +1161,7 @@ class ImageViewerWidget(ModernWindow):
         if self.image:
             scaled_size = self.image.size() * self.zoom_level
             self.originalImageLabel.setPixmap(self.image.scaled(
-                scaled_size.toSize(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                scaled_size.toSize(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
 
 class ImageDisplay(QLabel):
     # Add custom signal
@@ -1318,6 +1305,7 @@ class QProgressIndicator(QWidget):
         painter.setPen(QPen(QColor(COLORS['primary']), 3))
         painter.drawArc(-15, -15, 30, 30, 0, 300 * 16)
 
+
 class InfoButton(QPushButton):
     def __init__(self, tooltip, parent=None):
         super().__init__("ⓘ", parent)
@@ -1335,7 +1323,6 @@ class InfoButton(QPushButton):
             }}
         """)
 
-# Add custom QSlider with value tooltip
 class SliderWithTooltip(QSlider):
     def __init__(self, orientation, parent=None):
         super().__init__(orientation, parent)

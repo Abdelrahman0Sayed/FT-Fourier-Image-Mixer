@@ -66,12 +66,7 @@ def unify_images(self, viewers, minimumSize):
             target_row, target_column = minimumSize  # Assuming square resizing
             viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
             print(f"Image resized to: {viewer.imageData.shape}")
-
-
-
-    
-
-
+            imageFourierTransform(viewer , viewer.imageData)
 
 
 
@@ -94,10 +89,6 @@ def convert_data_to_image(imageData):
 
 
 
-
-
-
-
 def imageFourierTransform(self, imageData):
     fftComponents = np.fft.fft2(imageData)
     fftComponentsShifted = np.fft.fftshift(fftComponents)
@@ -109,9 +100,6 @@ def imageFourierTransform(self, imageData):
     self.ftReal = np.real(fftComponents)
     self.ftImaginary = np.imag(fftComponents)
     
-
-
-
 
 
 
@@ -136,11 +124,10 @@ def displayFrequencyComponent(self, PlottedComponent):
         label_height = self.ftComponentLabel.height()
         label_width = self.ftComponentLabel.width()
         
-        pixmap = pixmap.scaled(label_height, label_width, Qt.KeepAspectRatio)
+        pixmap = pixmap.scaled(label_height, label_width, Qt.IgnoreAspectRatio)
         self.magnitudeImage = pixmap
         self.ftComponentLabel.setPixmap(pixmap)
         
-
 
 
 
@@ -206,6 +193,8 @@ def displayFrequencyComponent(self, PlottedComponent):
         self.imaginaryImage = pixmap
         self.ftComponentLabel.setPixmap(pixmap)
     
+    parent = self.find_parent_window()
+    parent.real_time_mix()
 
 
 
