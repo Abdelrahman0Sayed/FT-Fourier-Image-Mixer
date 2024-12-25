@@ -4,7 +4,7 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 from matplotlib.figure import Figure
 import json
 from matplotlib import style
@@ -12,12 +12,12 @@ import matplotlib as mpl
 from typing import List, Dict
 from dataclasses import dataclass
 from enum import Enum
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT
 from beam_style import PLOT_STYLE, STYLE_SHEET
 
 @dataclass
 class ArrayUnit:
     id: int
+    name: str  # Add name field
     x_pos: float
     y_pos: float
     num_elements: int
@@ -32,6 +32,45 @@ class ScenarioType(Enum):
     FiveG = "5G Communications"
     ULTRASOUND = "Medical Ultrasound"
     ABLATION = "Tumor Ablation"
+
+class ModernSlider(QWidget):
+    """Custom slider widget with value display"""
+    valueChanged = pyqtSignal(float)
+    
+    def __init__(self, minimum, maximum, value, step=0.1, suffix=""):
+        super().__init__()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setRange(int(minimum/step), int(maximum/step))
+        self.slider.setValue(int(value/step))
+        self.step = step
+        self.suffix = suffix
+        
+        self.value_label = QLabel(f"{value:.1f}{suffix}")
+        self.value_label.setFixedWidth(60)
+        self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        layout.addWidget(self.slider)
+        layout.addWidget(self.value_label)
+        self.setLayout(layout)
+        
+        self.slider.valueChanged.connect(self._on_slider_changed)
+        
+    def _on_slider_changed(self, value):
+        actual_value = value * self.step
+        self.value_label.setText(f"{actual_value:.1f}{self.suffix}")
+        self.valueChanged.emit(actual_value)
+        
+    def value(self):
+        return self.slider.value() * self.step
+    
+    def setValue(self, value):
+        self.slider.setValue(int(value/self.step))
+        
+    def blockSignals(self, block):
+        self.slider.blockSignals(block)
 
 
 class ModernButton(QPushButton):
@@ -324,40 +363,6 @@ class BeamformingSimulator(QMainWindow):
             # Calculate combined pattern for all units
             self.calculate_combined_pattern()
 
-    def calculate_single_pattern(self, unit):
-        k = 2 * np.pi
-        x, y = self.calculate_array_geometry(unit)
-        theta = np.linspace(-np.pi/2, np.pi/2, 1000)
-        pattern = np.zeros_like(theta, dtype=np.complex128)
-        interference = np.zeros_like(self.X, dtype=np.complex128)
-        
-        # Calculate for each frequency
-        for freq in unit.operating_freqs:
-            k_freq = k * freq  # Scale wavenumber by frequency
-            theta_steer = np.radians(unit.steering_angle)
-            
-            # Add beam pattern contribution
-            for i in range(len(theta)):
-                phase = k_freq * (x * np.sin(theta[i]) + y * np.cos(theta[i]))
-                steer_phase = k_freq * x * np.sin(theta_steer)
-                pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
-                
-            # Add interference contribution
-            for i in range(len(x)):
-                r = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
-                phase = k_freq * r
-                steer_phase = k_freq * x[i] * np.sin(theta_steer)
-                interference += np.exp(1j * (phase - steer_phase))
-        
-        pattern = np.abs(pattern) / len(unit.operating_freqs)
-        pattern = pattern / np.max(pattern)
-        
-        interference = np.abs(interference) / len(unit.operating_freqs)
-        interference = interference / np.max(interference)
-        
-        self.update_pattern_plot(theta, pattern)
-        self.update_array_plot(x, y)
-        self.update_interference_plot(self.x_field, self.y_field, interference)
 
     def calculate_array_geometry(self, unit):
         if unit.geometry_type == "Linear":
@@ -373,128 +378,122 @@ class BeamformingSimulator(QMainWindow):
         return x, y
 
     def calculate_combined_pattern(self):
-        theta = np.linspace(-np.pi/2, np.pi/2, 1000)
-        pattern = np.zeros_like(theta, dtype=np.complex128)
-        interference = np.zeros_like(self.X, dtype=np.complex128)
+        # Step 1: Setup basic parameters
+        viewing_angles = np.linspace(-np.pi/2, np.pi/2, 1000)  # -90° to +90°
+        beam_pattern = np.zeros_like(viewing_angles, dtype=np.complex128)
+        field_interference = np.zeros_like(self.X, dtype=np.complex128)
         
-        # Normalize operating frequencies relative to the highest frequency
-        max_freq = max([max(unit.operating_freqs) for unit in self.array_units if unit.enabled])
+        # Find highest frequency among all active units
+        highest_freq = max([max(unit.operating_freqs) for unit in self.array_units if unit.enabled])
         
+        # Step 2: Process each active array unit
         for unit in self.array_units:
             if not unit.enabled:
                 continue
-                
-            x, y = self.calculate_array_geometry(unit)
-            theta_steer = np.radians(unit.steering_angle)
             
-            # Calculate for each frequency
+            # Get unit position coordinates
+            element_x, element_y = self.calculate_array_geometry(unit)
+            steering_angle = np.radians(unit.steering_angle)
+            
+            # Step 3: Process each frequency
             for freq in unit.operating_freqs:
-                # Normalized wavenumber calculation
-                k = 2 * np.pi * (freq/max_freq)
-                wavelength = 1/freq
+                # Basic wave parameters
+                normalized_freq = freq/highest_freq
+                wave_number = 2 * np.pi * normalized_freq
+                wave_length = 1/freq
                 
-                # Calculate critical distance (near-field to far-field transition)
-                array_size = unit.num_elements * unit.element_spacing
-                critical_distance = 2 * array_size**2 / wavelength
+                # Calculate transition distance from near to far field
+                array_length = unit.num_elements * unit.element_spacing
+                near_far_transition = 2 * array_length**2 / wave_length
                 
-                # Add to beam pattern (far-field)
-                for i in range(len(theta)):
-                    if unit.geometry_type == "Linear":
-                        phase = k * (x * np.sin(theta[i]) + y * np.cos(theta[i]))
-                        steer_phase = k * (x * np.sin(theta_steer))
-                    else:  # Curved array
-                        # Improved phase calculation for curved arrays
-                        r_points = np.sqrt((x * np.sin(theta[i]))**2 + (y * np.cos(theta[i]))**2)
-                        phase = k * r_points
-                        r_steer = np.sqrt((x * np.sin(theta_steer))**2 + (y * np.cos(theta_steer))**2)
-                        steer_phase = k * r_steer
-                    
-                    pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
+                # Step 4: Calculate far-field pattern
+                self._calculate_far_field_pattern(
+                    beam_pattern, viewing_angles, element_x, element_y,
+                    wave_number, steering_angle, unit.geometry_type
+                )
                 
-                # Calculate interference field with near-field/far-field transitions
-                for i in range(len(x)):
-                    r = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
-                    phase = k * r
-                    
-                    # Improved amplitude calculation
-                    if unit.geometry_type == "Linear":
-                        steer_phase = k * (x[i] * np.sin(theta_steer))
-                    else:
-                        r_steer = np.sqrt((x[i] * np.sin(theta_steer))**2 + (y[i] * np.cos(theta_steer))**2)
-                        steer_phase = k * r_steer
-                    
-                    # Near-field/far-field transition
-                    transition_factor = np.clip(r / critical_distance, 0, 1)
-                    
-                    # Enhanced amplitude calculation
-                    amplitude = np.where(
-                        r < critical_distance,
-                        1.0 / (r + wavelength/10),  # Near-field
-                        1.0 / np.sqrt(r + wavelength/10)  # Far-field
-                    )
-                    
-                    # Frequency-dependent scaling
-                    freq_scale = np.sqrt(freq/max_freq)
-                    
-                    # Add contribution with transition
-                    interference += (amplitude * freq_scale * 
-                                np.exp(1j * (phase - steer_phase)) * 
-                                transition_factor)
+                # Step 5: Calculate interference field
+                self._calculate_interference_field(
+                    field_interference, element_x, element_y,
+                    wave_number, wave_length, steering_angle,
+                    near_far_transition, normalized_freq, unit.geometry_type
+                )
         
-        # Normalize pattern
-        pattern = np.abs(pattern)
-        pattern = pattern / np.max(pattern) if np.max(pattern) > 0 else pattern
+        # Step 6: Normalize and update plots
+        normalized_pattern = self._normalize_pattern(beam_pattern)
+        interference_display = self._process_interference(field_interference)
         
-        # Process interference field with improved dynamic range
-        interference_mag = np.abs(interference)
-        interference_max = np.max(interference_mag)
-        
-        if interference_max > 0:
-            # Convert to dB with enhanced dynamic range
-            interference_db = 20 * np.log10(interference_mag / interference_max + 1e-10)
-            interference_db = np.clip(interference_db, -60, 0)
-        else:
-            interference_db = np.zeros_like(interference_mag) - 60
-        
-        # Update visualizations
-        self.update_pattern_plot(theta, pattern)
-        self.update_array_plot(
-            np.array([x for unit in self.array_units if unit.enabled 
-                    for x in self.calculate_array_geometry(unit)[0]]),
-            np.array([y for unit in self.array_units if unit.enabled 
-                    for y in self.calculate_array_geometry(unit)[1]])
-        )
-        self.update_interference_plot(self.x_field, self.y_field, interference_db)
+        # Update all visualization plots
+        self._update_all_plots(normalized_pattern, viewing_angles, interference_display)
 
-    def update_interference_plot(self, x, y, interference, cmap='RdBu_r'):
-        self.last_interference_data = interference
-        self.interference_fig.clear()
-        ax = self.interference_fig.add_subplot(111)
+    def _calculate_far_field_pattern(self, pattern, angles, x, y, k, steer_angle, geometry):
+        for i, theta in enumerate(angles):
+            if geometry == "Linear":
+                phase = k * (x * np.sin(theta) + y * np.cos(theta))
+                steer_phase = k * (x * np.sin(steer_angle))
+            else:  # Curved array
+                r = np.sqrt((x * np.sin(theta))**2 + (y * np.cos(theta))**2)
+                phase = k * r
+                r_steer = np.sqrt((x * np.sin(steer_angle))**2 + (y * np.cos(steer_angle))**2)
+                steer_phase = k * r_steer
+            
+            pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
+
+    def _calculate_interference_field(self, interference, x, y, k, wavelength, 
+                                    steer_angle, transition_dist, freq_scale, geometry):
+        # For each antenna element
+        for i in range(len(x)):
+            # Calculate distance to all field points
+            distance = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
+            
+            # Calculate the new wave phase at each point based on distance
+            wave_phase = k * distance
+            
+            # Calculate steering phase based on geometry
+            if geometry == "Linear":
+                steer_phase = k * (x[i] * np.sin(steer_angle))
+            else:  # Curved array
+                r_steer = np.sqrt((x[i] * np.sin(steer_angle))**2 + (y[i] * np.cos(steer_angle))**2)
+                steer_phase = k * r_steer
+            
+            # Calculate wave amplitude
+            near_field = 1.0 / (distance + wavelength/10)
+            far_field = 1.0 / np.sqrt(distance + wavelength/10)
+            # ensure transition factor is between 0 and 1
+            transition_factor = np.clip(distance / transition_dist, 0, 1)
+            amplitude = np.where(distance < transition_dist, near_field, far_field)
+            
+            wave = amplitude * np.sqrt(freq_scale)  # Wave strength
+            phase = np.exp(1j * (wave_phase - steer_phase))  # Wave phase
+            interference += wave * phase * transition_factor
+
+    def _normalize_pattern(self, pattern):
+        pattern = np.abs(pattern)
+        return pattern / np.max(pattern) if np.max(pattern) > 0 else pattern
+
+    def _process_interference(self, interference):
+        magnitude = np.abs(interference)
+        max_value = np.max(magnitude)
         
-        # Plot interference pattern
-        im = ax.imshow(interference,
-                    extent=[x.min(), x.max(), y.min(), y.max()],
-                    origin='lower',
-                    cmap=cmap,
-                    aspect='equal',
-                    vmin=-60,  # dB range minimum
-                    vmax=0)    # dB range maximum
+        if max_value > 0:
+            db_values = 20 * np.log10(magnitude / max_value + 1e-10)
+            return np.clip(db_values, -60, 0)
+        return np.zeros_like(magnitude) - 60
+
+    def _update_all_plots(self, pattern, angles, interference):
+        self.update_pattern_plot(angles, pattern)
         
-        ax.set_title('Interference Pattern (dB)', color='white', pad=10)
-        ax.set_xlabel('X Position (λ)', color='white')
-        ax.set_ylabel('Y Position (λ)', color='white')
+        active_elements_x = []
+        active_elements_y = []
+        for unit in self.array_units:
+            if unit.enabled:
+                x, y = self.calculate_array_geometry(unit)
+                active_elements_x.extend(x)
+                active_elements_y.extend(y)
         
-        # Add colorbar
-        cbar = self.interference_fig.colorbar(im)
-        cbar.ax.set_ylabel('Relative Power (dB)', color='white')
-        cbar.ax.tick_params(colors='white')
-        
-        # Add grid and style
-        ax.grid(True, color='#404040', alpha=0.5, linestyle='--')
-        ax.tick_params(colors='white')
-        ax.set_facecolor('#1e1e1e')
-        
-        self.interference_canvas.draw()
+        self.update_array_plot(np.array(active_elements_x), np.array(active_elements_y))
+        self.update_interference_plot(self.x_field, self.y_field, interference)
+
 
     def update_interference_plot(self, x, y, interference, cmap='RdBu_r'):
         self.last_interference_data = interference
@@ -533,11 +532,6 @@ class BeamformingSimulator(QMainWindow):
         pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
         pattern_db = np.clip(pattern_db, -40, 0)
         normalized_pattern = pattern_db + 40  # Shift to positive values
-        
-        # Main beam pattern with gradient color
-        points = ax.plot(theta, normalized_pattern, linewidth=3, 
-                        color='#2196f3', label='Main Beam')
-        
         # Fill regions with transparency for better visualization
         main_lobe_mask = pattern_db >= -3
         side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
@@ -578,7 +572,7 @@ class BeamformingSimulator(QMainWindow):
             beam_width = np.abs(np.degrees(theta[idx_above[-1]] - theta[idx_above[0]]))
             metrics_text = (
                 f'Key Metrics:\n'
-                f'• Beam Width]: {beam_width:.1f}°\n'
+                f'• Beam Width: {beam_width:.1f}°\n'
                 f'• Directivity: {10*np.log10(1/beam_width*180/np.pi):.1f} dB'
             )
             ax.text(np.pi/2, 45, metrics_text,
@@ -843,6 +837,7 @@ class BeamformingSimulator(QMainWindow):
                 "params": {
                     "units": [
                         {
+                            "name": "5G Base Station",
                             "num_elements": 16,
                             "element_spacing": 0.5,
                             "steering_angle": 0,
@@ -861,6 +856,7 @@ class BeamformingSimulator(QMainWindow):
                 "params": {
                     "units": [
                         {
+                            "name": "Ultrasound Probe",
                             "num_elements": 16,
                             "element_spacing": .06,
                             "steering_angle": 0,
@@ -879,6 +875,7 @@ class BeamformingSimulator(QMainWindow):
                 "params": {
                     "units": [
                         {
+                            "name": "Ultrasound Probe",
                             "num_elements": 20,
                             "element_spacing": 0.25,
                             "steering_angle": 0,
@@ -938,86 +935,112 @@ class BeamformingSimulator(QMainWindow):
         unit_controls = QGroupBox("Selected Unit Controls")
         unit_layout = QFormLayout()
 
-        # Add geometry type control
+        # Geometry type control remains a combobox
         self.geometry_type = QComboBox()
         self.geometry_type.addItems(["Linear", "Curved"])
-        self.geometry_type.currentTextChanged.connect(self.update_unit_parameters)
+        self.geometry_type.currentTextChanged.connect(self.on_geometry_changed)
         unit_layout.addRow("Array Type:", self.geometry_type)
 
         # Position controls
-        self.unit_x = QDoubleSpinBox()
-        self.unit_x.setRange(-20, 20)
+        self.unit_x = ModernSlider(-20, 20, 0, 0.1, " λ")
         self.unit_x.valueChanged.connect(self.update_unit_position)
         unit_layout.addRow("X Position:", self.unit_x)
 
-        self.unit_y = QDoubleSpinBox()
-        self.unit_y.setRange(-20, 20)
+        self.unit_y = ModernSlider(-20, 20, 0, 0.1, " λ")
         self.unit_y.valueChanged.connect(self.update_unit_position)
         unit_layout.addRow("Y Position:", self.unit_y)
 
-        # Unit parameters
-        self.unit_elements = QSpinBox()
-        self.unit_elements.setRange(1, 128)
-        self.unit_elements.setValue(16)  # Set default value
+        # Unit parameters with sliders
+        self.unit_elements = ModernSlider(1, 128, 16, 1, "")
         self.unit_elements.valueChanged.connect(self.update_unit_parameters)
         unit_layout.addRow("Elements:", self.unit_elements)
 
-        self.unit_spacing = QDoubleSpinBox()
-        self.unit_spacing.setRange(0.1, 10.0)
-        self.unit_spacing.setValue(0.5)  # Set default value
+        self.unit_spacing = ModernSlider(0.1, 10.0, 0.5, 0.1, " λ")
         self.unit_spacing.valueChanged.connect(self.update_unit_parameters)
         unit_layout.addRow("Spacing:", self.unit_spacing)
 
-        self.unit_steering = QDoubleSpinBox()
-        self.unit_steering.setRange(-90, 90)
+        self.unit_steering = ModernSlider(-90, 90, 0, 1, "°")
         self.unit_steering.valueChanged.connect(self.update_unit_parameters)
         unit_layout.addRow("Steering:", self.unit_steering)
 
-
-        # Replace curvature with curvature factor
-        self.unit_curvature = QDoubleSpinBox()
-        self.unit_curvature.setRange(0, 2)
-        self.unit_curvature.setValue(1)
-        self.unit_curvature.setSingleStep(0.1)
+        self.curvature_widget = QWidget()
+        curvature_layout = QFormLayout()
+        curvature_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.unit_curvature = ModernSlider(0, 2, 1, 0.1, "")
         self.unit_curvature.valueChanged.connect(self.update_unit_parameters)
-        unit_layout.addRow("Curvature Factor:", self.unit_curvature)
+        curvature_layout.addRow("Curvature Factor:", self.unit_curvature)
+        
+        self.curvature_widget.setLayout(curvature_layout)
+        unit_layout.addRow("", self.curvature_widget)
+        self.curvature_widget.hide()  # Initially hidden
 
         # Add frequency controls
-        freq_group = QGroupBox("Frequencies")
+        freq_group = QGroupBox("Operating Frequencies")
         freq_layout = QVBoxLayout()
         
-        self.freq_list = QListWidget()
-        self.freq_list.setStyleSheet("""
-            QListWidget {
+        # Create frequency table
+        self.freq_table = QTableWidget()
+        self.freq_table.setColumnCount(2)
+        self.freq_table.setHorizontalHeaderLabels(['Frequency', 'Unit'])
+        self.freq_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.freq_table.setStyleSheet("""
+            QTableWidget {
                 background-color: #2d2d2d;
                 border: 1px solid #3a3a3a;
                 border-radius: 4px;
-                min-height: 100px;
+                color: white;
+            }
+            QHeaderView::section {
+                background-color: #1e1e1e;
+                color: white;
+                padding: 5px;
+                border: none;
             }
         """)
-        freq_layout.addWidget(self.freq_list)
+        freq_layout.addWidget(self.freq_table)
         
-        freq_controls = QHBoxLayout()
+        # Frequency input controls
+        input_layout = QHBoxLayout()
         
-        self.freq_input = QDoubleSpinBox()
-        self.freq_input.setRange(1, 1000)
-        self.freq_input.setValue(100)
-        self.freq_input.setSuffix(" MHz")
-        freq_controls.addWidget(self.freq_input)
+        self.freq_input = ModernSlider(0.1, 1000, 100, 0.1, " MHz")
+        input_layout.addWidget(self.freq_input)
         
-        add_freq_btn = ModernButton("+")
-        add_freq_btn.setFixedWidth(40)
+        add_freq_btn = ModernButton("Add")
         add_freq_btn.clicked.connect(self.add_frequency)
-        freq_controls.addWidget(add_freq_btn)
+        input_layout.addWidget(add_freq_btn)
         
-        remove_freq_btn = ModernButton("-")
-        remove_freq_btn.setFixedWidth(40)
+        remove_freq_btn = ModernButton("Remove")
         remove_freq_btn.clicked.connect(self.remove_frequency)
-        freq_controls.addWidget(remove_freq_btn)
+        input_layout.addWidget(remove_freq_btn)
         
-        freq_layout.addLayout(freq_controls)
+        freq_layout.addLayout(input_layout)
+        
+        # Add frequency presets
+        preset_layout = QHBoxLayout()
+        preset_label = QLabel("Presets:")
+        preset_label.setStyleSheet("color: white;")
+        preset_layout.addWidget(preset_label)
+        
+        presets = {
+            "5G": 28,
+            "WiFi": 2.4,
+            "Ultrasound": 5,
+            "RADAR": 10
+        }
+        
+        for name, freq in presets.items():
+            preset_btn = ModernButton(name)
+            preset_btn.setFixedWidth(60)
+            preset_btn.clicked.connect(lambda checked, f=freq: self.freq_input.setValue(f))
+            preset_layout.addWidget(preset_btn)
+        
+        preset_layout.addStretch()
+        freq_layout.addLayout(preset_layout)
+        
         freq_group.setLayout(freq_layout)
-        unit_layout.addRow("Operating Frequencies:", freq_group)
+        unit_layout.addRow("", freq_group)
+
 
         unit_controls.setLayout(unit_layout)
         units_layout.addWidget(unit_controls)
@@ -1027,9 +1050,22 @@ class BeamformingSimulator(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, units_dock)
 
 
+    def on_geometry_changed(self, geometry_type):
+        """Handle geometry type changes"""
+        self.curvature_widget.setVisible(geometry_type == "Curved")
+        self.update_unit_parameters()
+
+
     def add_frequency(self):
         freq = self.freq_input.value()
-        self.freq_list.addItem(f"{freq} MHz")
+        row = self.freq_table.rowCount()
+        self.freq_table.insertRow(row)
+        
+        freq_item = QTableWidgetItem(f"{freq}")
+        unit_item = QTableWidgetItem("MHz")
+        
+        self.freq_table.setItem(row, 0, freq_item)
+        self.freq_table.setItem(row, 1, unit_item)
         
         # Update unit if one is selected
         current_item = self.units_list.currentItem()
@@ -1041,18 +1077,27 @@ class BeamformingSimulator(QMainWindow):
                 self.update_pattern()
 
     def remove_frequency(self):
-        current_row = self.freq_list.currentRow()
+        """Remove selected frequency with validation"""
+        current_row = self.freq_table.currentRow()
         if current_row >= 0:
-            self.freq_list.takeItem(current_row)
+            # Don't allow removal of last frequency
+            if self.freq_table.rowCount() <= 1:
+                QMessageBox.warning(self, "Warning", 
+                                "Cannot remove last frequency.\nAt least one frequency is required.")
+                return
+                
+            self.freq_table.removeRow(current_row)
             
             # Update unit if one is selected
             current_item = self.units_list.currentItem()
             if current_item:
                 unit_id = current_item.data(Qt.UserRole)
                 unit = next((u for u in self.array_units if u.id == unit_id), None)
-                if unit:
+                if unit and len(unit.operating_freqs) > current_row:
                     unit.operating_freqs.pop(current_row)
                     self.update_pattern()
+
+
 
     def toggle_edit_mode(self):
         if self.editing_mode:
@@ -1075,8 +1120,7 @@ class BeamformingSimulator(QMainWindow):
         self.unit_spacing.setValue(0.5)
         self.unit_steering.setValue(0)
         self.unit_curvature.setValue(1)
-        self.freq_list.clear()
-        self.geometry_type.setCurrentText("Linear")
+        self.freq_table.setRowCount(0)
 
     def on_unit_selected(self, current, previous):
         if current:
@@ -1097,6 +1141,7 @@ class BeamformingSimulator(QMainWindow):
                 self.unit_steering.setValue(unit.steering_angle)
                 self.unit_curvature.setValue(unit.curvature_factor)
                 self.geometry_type.setCurrentText(unit.geometry_type)
+                self.curvature_widget.setVisible(unit.geometry_type == "Curved")
                 
                 # Re-enable signals
                 for control in [self.unit_x, self.unit_y, self.unit_elements,
@@ -1104,31 +1149,47 @@ class BeamformingSimulator(QMainWindow):
                                 self.unit_curvature, self.geometry_type]:
                     control.blockSignals(False)
                     
-                # Update frequency list
-                self.freq_list.clear()
+                # Update frequency table
+                self.freq_table.setRowCount(0)
                 for freq in unit.operating_freqs:
-                    self.freq_list.addItem(f"{freq} MHz")
+                    row = self.freq_table.rowCount()
+                    self.freq_table.insertRow(row)
+                    self.freq_table.setItem(row, 0, QTableWidgetItem(f"{freq}"))
+                    self.freq_table.setItem(row, 1, QTableWidgetItem("MHz"))
                 
                 self.add_edit_button.setText("Exit Edit Mode")
                 self.editing_mode = True
 
+
     def update_unit_parameters(self):
-        """Update selected unit parameters in real-time"""
+        """Update selected unit parameters in real-time with frequency validation"""
         current_item = self.units_list.currentItem()
         if current_item and self.array_units and self.editing_mode:
             unit_id = current_item.data(Qt.UserRole)
             unit = next((u for u in self.array_units if u.id == unit_id), None)
             if unit:
-                # Update all unit parameters
+                # Get frequencies from table
+                frequencies = []
+                for i in range(self.freq_table.rowCount()):
+                    try:
+                        freq = float(self.freq_table.item(i, 0).text())
+                        frequencies.append(freq)
+                    except (ValueError, AttributeError):
+                        continue
+                
+                # Ensure at least one frequency exists
+                if not frequencies:
+                    frequencies = [self.freq_input.value()]
+                    self.add_frequency()  # Add default frequency to table
+                
+                # Update unit parameters
                 unit.num_elements = self.unit_elements.value()
                 unit.element_spacing = self.unit_spacing.value()
                 unit.steering_angle = self.unit_steering.value()
                 unit.geometry_type = self.geometry_type.currentText()
                 unit.curvature_factor = self.unit_curvature.value()
-                # Update frequencies
-                unit.operating_freqs = [float(self.freq_list.item(i).text().replace(" MHz", "")) 
-                                        for i in range(self.freq_list.count())]
-                # Always update pattern
+                unit.operating_freqs = frequencies
+                
                 self.update_pattern()
 
     def update_unit_position(self):
@@ -1156,42 +1217,49 @@ class BeamformingSimulator(QMainWindow):
             self.remove_array_unit(unit_id)
             self.units_list.takeItem(self.units_list.row(current_item))
 
-    def update_units_list(self):
-        self.units_list.clear()
-        for unit in self.array_units:
-            item = QListWidgetItem(f"Unit {unit.id}")
-            item.setData(Qt.UserRole, unit.id)
-            self.units_list.addItem(item)
-
     def add_array_unit(self):
-        # Get current frequencies from list
-        frequencies = [float(self.freq_list.item(i).text().replace(" MHz", "")) 
-                    for i in range(self.freq_list.count())]
+        # Get current frequencies from table
+        frequencies = []
+        for row in range(self.freq_table.rowCount()):
+            freq_item = self.freq_table.item(row, 0)
+            if freq_item:
+                frequencies.append(float(freq_item.text()))
+                
         if not frequencies:  # If no frequencies, use default
             frequencies = [self.freq_input.value()]
             
-        unit = ArrayUnit(
-            id=self.current_unit_id,
-            x_pos=self.unit_x.value(),
-            y_pos=self.unit_y.value(),
-            num_elements=self.unit_elements.value(),
-            element_spacing=self.unit_spacing.value(),
-            steering_angle=self.unit_steering.value(),
-            geometry_type=self.geometry_type.currentText(),
-            curvature_factor=self.unit_curvature.value(),
-            operating_freqs=frequencies.copy(),  # Make a copy of frequencies
-            enabled=True
-        )
-        self.array_units.append(unit)
-        self.current_unit_id += 1
-        #exit edit mode
-        self.editing_mode = False
-        self.add_edit_button.setText("Add Unit")
-        self.clear_unit_controls()
+        # Create dialog for unit name
+        name, ok = QInputDialog.getText(self, "New Unit", "Enter unit name:")
+        if ok and name:
+            unit = ArrayUnit(
+                id=self.current_unit_id,
+                name=name,
+                x_pos=self.unit_x.value(),
+                y_pos=self.unit_y.value(),
+                num_elements=self.unit_elements.value(),
+                element_spacing=self.unit_spacing.value(),
+                steering_angle=self.unit_steering.value(),
+                geometry_type=self.geometry_type.currentText(),
+                curvature_factor=self.unit_curvature.value(),
+                operating_freqs=frequencies,
+                enabled=True
+            )
+            self.array_units.append(unit)
+            self.current_unit_id += 1
+            
+            self.editing_mode = False
+            self.add_edit_button.setText("Add Unit")
+            self.clear_unit_controls()
+            
+            self.update_units_list()
+            self.update_pattern()
 
-
-        self.update_units_list()
-        self.update_pattern()
+    def update_units_list(self):
+        self.units_list.clear()
+        for unit in self.array_units:
+            item = QListWidgetItem(f"{unit.name}")  # Show unit name instead of "Unit {id}"
+            item.setData(Qt.UserRole, unit.id)
+            self.units_list.addItem(item)
 
     def remove_array_unit(self, unit_id: int):
         self.array_units = [u for u in self.array_units if u.id != unit_id]
