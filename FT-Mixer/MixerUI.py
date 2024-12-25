@@ -105,7 +105,10 @@ class ModernWindow(QMainWindow):
     def schedule_real_time_mix(self):
         if not self.is_mixing:
             self.mix_timer.stop()
-            self.mix_timer.start(200)  # 200ms debounce
+            self.mix_timer.start(600)  # 200ms debounce
+
+
+
 
     def real_time_mix(self):
         try:
@@ -492,6 +495,7 @@ class ModernWindow(QMainWindow):
             
     def buildUI(self):
         # Main container
+
         logging.info("Starting Application.")
         self._ui_initialized = True
         self.container = QWidget()
@@ -692,7 +696,12 @@ class ModernWindow(QMainWindow):
 
     def _on_region_size_changed(self):
         draw_rectangle(self, self.viewers, self.region_size.value(), self.region)
-        self.real_time_mix()
+        parent = self
+        while parent and not isinstance(parent, ModernWindow):
+            parent = parent.parent()
+        if parent:
+            # Schedule the real-time mix instead of calling it directly
+            parent.schedule_real_time_mix()
 
     def changeRegion(self, region):
         self.real_time_mix()
@@ -721,15 +730,19 @@ class ModernWindow(QMainWindow):
 
         self.real_time_mix()
 
+
+
     def toggleMaximized(self):
         if self.isMaximized():
             self.showNormal()
         else:
             self.showMaximized()
 
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.oldPos = event.globalPos()
+
 
     def mouseMoveEvent(self, event):
         if self.oldPos:
@@ -737,9 +750,11 @@ class ModernWindow(QMainWindow):
             self.move(self.pos() + delta)
             self.oldPos = event.globalPos()
 
+
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.oldPos = None
+
 
     def show_error(self, message):
         error_dialog = QMessageBox(self)
@@ -760,12 +775,16 @@ class ModernWindow(QMainWindow):
         """)
         error_dialog.exec_()
 
+
+
     def _setup_shortcuts(self):
         # Keyboard shortcuts
         QShortcut(QKeySequence("Ctrl+Q"), self, self.close)
         QShortcut(QKeySequence("Ctrl+M"), self, self.showMinimized)
         QShortcut(QKeySequence("F11"), self, self.toggleMaximized)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reset_all)
+
+
 
     def _setup_statusbar(self):
         self.statusBar = QStatusBar()
@@ -820,6 +839,65 @@ class ModernWindow(QMainWindow):
             self.restore_state(state)
             self.statusBar.showMessage("Redo successful", 2000)
         
+
+class MainController:
+    def __init__(self, window):
+        self.window = window
+        self.current_thread = None
+        
+from io import BytesIO
+import sys
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtWidgets import QMenu, QAction, QToolTip
+from functools import partial
+from Image_functions import loadImage, imageFourierTransform, displayFrequencyComponent, unify_images , convert_data_to_image, convet_mixed_to_qImage
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5 import QtCore, QtGui, QtWidgets
+from MixerUI import ModernWindow
+from ImageDisplay import ImageDisplay
+import logging
+
+
+
+
+logging.basicConfig(
+    level=logging.DEBUG,  # Set the logging level
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    filename="app.log",  # Log to a file
+    filemode="a",  # Append to the file; use "w" for overwriting
+)
+
+COLORS = {
+    'background': '#1E1E1E',  # Darker background
+    'surface': '#252526',     # Slightly lighter surface
+    'primary': '#007ACC',     # Keep the blue accent
+    'secondary': '#3E3E42',   # Darker secondary
+    'text': '#FFFFFF',        # Brighter text
+    'border': '#3E3E42',      # Subtler borders
+    'hover': '#2D2D30',       # Subtle hover state
+    'success': '#4CAF50',
+    'warning': '#FFA726',
+    'info': '#29B6F6'
+}
+
+
+# Add to COLORS dictionary
+COLORS.update({
+    'hover': '#404040',
+    'success': '#4CAF50', 
+    'warning': '#FFA726',
+    'info': '#29B6F6'
+})
+
+
 class ImageViewerWidget(ModernWindow):
     weightChanged = pyqtSignal(float, str)
     def __init__(self, title, window=None, is_output=False):  
@@ -828,7 +906,7 @@ class ImageViewerWidget(ModernWindow):
         self.setObjectName("imageViewer")
         self.window = window
         self.is_output = is_output
-
+        self.minimumSize = (0, 0)
         # Viewer-specific attributes
         self.imageData = None
         self.qImage = None
@@ -847,6 +925,35 @@ class ImageViewerWidget(ModernWindow):
         self.last_mouse_pos = None
         self.last_pos = None
         self.zoom_level = 1.0
+        # Viewer-specific attributes
+        self.drawing = False
+        self.start_point = None
+        self.end_point = None
+
+        # Initialize dragging flag and last position
+        self.dragging = False
+        self.last_pos = None
+
+        # Initialize rectangle for drawing
+        self.rect_item = QGraphicsRectItem(0, 0, 300, 300)  # Initial rectangle at (0, 0) with size 300x300
+        self.rect_item.setPen(Qt.red)
+        self.rect_item.setBrush(Qt.transparent)
+
+        # Create a scene for the rectangle (we'll update this later)
+        self.scene = QGraphicsScene(self)
+        self.scene.addItem(self.rect_item)
+
+        # Create a view to display the scene containing the rectangle
+        self.view = QGraphicsView(self.scene, self)
+        self.view.setGeometry(100, 100, 500, 500)  # Example size for the view
+
+
+        self.resizing_edge = None  # For resizing logic
+        self.brightness = 0
+        self.contrast = 1
+        self.imageData = None  # Example image data for processing (should be set from the original image)
+
+
 
         # Call the _setup_ui method specific to ImageViewerWidget
         self.build_ui(title)
@@ -975,28 +1082,52 @@ class ImageViewerWidget(ModernWindow):
         if parent:
             # Schedule the real-time mix instead of calling it directly
             parent.schedule_real_time_mix()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton and self.originalImageLabel.underMouse():
-            self.dragging = True
-            self.last_pos = event.pos()  
     
-    def mouseMoveEvent(self, event):
-        if self.last_pos is None:
-            self.last_pos = event.pos() 
-        delta_x = event.pos().x() - self.last_pos.x()
-        delta_y = event.pos().y() - self.last_pos.y()
-        # Adjust brightness and contrast based on mouse movement
-        newImageData = self.adjust_brightness_contrast(delta_x / 10, delta_y / 10)
-        # Update last position for the next event
-        self.last_pos = event.pos()
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            if self.originalImageLabel.underMouse():
+                self.dragging = True
+                self.last_pos = event.pos()
+                # No need to check for edges when adjusting brightness, just drag to adjust
+            elif self.ftComponentLabel.underMouse():
+                self.dragging = True
+                self.last_pos = event.pos()
+                # Handle rectangle resizing or dragging here
+                self.resizing_edge = self.get_edge_under_mouse(event.pos())
 
-        imageFourierTransform(self, newImageData)
-        displayFrequencyComponent(self, self.component_selector.currentText())
+    def mouseMoveEvent(self, event):
+        if self.dragging:
+            if self.originalImageLabel.underMouse():
+                if self.last_pos is None:
+                    self.last_pos = event.pos()
+
+                delta_x = event.pos().x() - self.last_pos.x()
+                delta_y = event.pos().y() - self.last_pos.y()
+
+                # Adjust brightness and contrast based on mouse movement
+                newImageData = self.adjust_brightness_contrast(delta_x / 10, delta_y / 10)
+
+                # Update last position for the next event
+                self.last_pos = event.pos()
+
+                # Process the adjusted image
+                imageFourierTransform(self, newImageData)
+                displayFrequencyComponent(self, self.component_selector.currentText())
+
+            elif self.ftComponentLabel.underMouse():
+                if self.last_pos is None:
+                    self.last_pos = event.pos()
+
+                # Resize or move the rectangle
+                if self.resizing_edge:
+                    self.resize_rect(event.pos())
+                else:
+                    self.move_rect(event.pos())
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragging = False
+            self.resizing_edge = None
 
     def adjust_brightness_contrast(self, delta_x, delta_y):
         brightness_step = 0.4
@@ -1010,7 +1141,7 @@ class ImageViewerWidget(ModernWindow):
 
         if self.imageData is not None:
             print("Adjusting image brightness and contrast...")
-            
+
             # Apply contrast and brightness adjustments
             adjusted_image = cv2.convertScaleAbs(self.imageData, alpha=self.contrast, beta=self.brightness)
             adjusted_image = np.clip(adjusted_image, 0, 255).astype(np.uint8)
@@ -1027,10 +1158,43 @@ class ImageViewerWidget(ModernWindow):
             pixmap_image = QPixmap.fromImage(q_image)
             label_width = self.originalImageLabel.width()
             label_height = self.originalImageLabel.height()
-            pixmap_image = pixmap_image.scaled(label_width, label_height, Qt.IgnoreAspectRatio)
+            pixmap_image = pixmap_image.scaled(label_width, label_height, Qt.KeepAspectRatio)
             self.originalImageLabel.setPixmap(pixmap_image)
 
             return adjusted_image
+
+    def get_edge_under_mouse(self, pos):
+        rect = self.rect_item.rect()
+        if rect.adjusted(-5, -5, 5, 5).contains(pos):  # Checking if we are close to the edge
+            return 'resize'
+        return None
+
+    def resize_rect(self, mouse_pos):
+        rect = self.rect_item.rect()
+
+        # Resize the rectangle based on mouse position
+        new_width = mouse_pos.x() - rect.left()
+        new_height = mouse_pos.y() - rect.top()
+
+        # Update the rectangle size
+        if new_width > 0 and new_height > 0:
+            self.rect_item.setRect(QRect(rect.topLeft(), QSize(new_width, new_height)))
+
+    def move_rect(self, mouse_pos):
+        rect = self.rect_item.rect()
+
+        # Move the rectangle to follow the mouse position
+        delta_x = mouse_pos.x() - self.last_pos.x()
+        delta_y = mouse_pos.y() - self.last_pos.y()
+
+        self.rect_item.setRect(rect.adjusted(delta_x, delta_y, delta_x, delta_y))
+        self.last_pos = mouse_pos
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        self.scene.render(painter)  # Render the scene (which contains the rectangle)
+        super().paintEvent(event)
+
 
     def _setup_zoom_controls(self):
         zoom_layout = QHBoxLayout()
@@ -1057,7 +1221,7 @@ class ImageViewerWidget(ModernWindow):
             self.originalImageLabel.showLoadingSpinner()
             # Load image
             parent = self.find_parent_window()
-
+            print("My Parent is     ", parent)
             self.image, self.imageData = loadImage(self, parent)
             self.qImage = convert_data_to_image(self.imageData)
             if self.qImage is None or self.imageData is None:
@@ -1163,198 +1327,7 @@ class ImageViewerWidget(ModernWindow):
             self.originalImageLabel.setPixmap(self.image.scaled(
                 scaled_size.toSize(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
 
-class ImageDisplay(QLabel):
-    # Add custom signal
-    dragComplete = pyqtSignal()
-    
-    def __init__(self):
-        super().__init__()
-        self.setMouseTracking(True)
-        self.setToolTip("Drag & Drop images here\nDrag mouse to adjust brightness/contrast")
-        self.loading_spinner = None
-        self._setup_loading_spinner()
-        self.setAcceptDrops(True)
-        self.drop_indicator = QLabel(self)
-        self.drop_indicator.hide()
-        self._setup_drop_indicator()
-        self.last_pos = None
-        self.image = None
-        self.brightness = 0
-        self.contrast = 1
 
-        self.setStyleSheet(f"""
-            QLabel {{
-                background: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 6px;
-                padding: 4px;
-            }}
-            QLabel:hover {{
-                border-color: {COLORS['primary']};
-            }}
-        """)    
-    def mouseDoubleClickEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.on_double_click()
-
-    def on_double_click(self):
-        pass
-
-    def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.last_pos = None
-            # Emit signal when drag is complete
-            self.dragComplete.emit()
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasImage() or event.mimeData().hasUrls():
-            event.accept()
-        else:
-            event.ignore()
-
-    def dropEvent(self, event):
-        self.hide_drop_indicator()
-        if event.mimeData().hasImage():
-            self.setPixmap(QPixmap.fromImage(event.mimeData().imageData()))
-        elif event.mimeData().hasUrls():
-            file_path = event.mimeData().urls()[0].toLocalFile()
-            self.setPixmap(QPixmap(file_path))
-    
-    def _setup_loading_spinner(self):
-        self.loading_spinner = QProgressIndicator(self)
-        self.loading_spinner.hide()
-        
-    def showLoadingSpinner(self):
-        if self.loading_spinner:
-            self.loading_spinner.start()
-            self.loading_spinner.show()
-    
-    def hideLoadingSpinner(self):
-        if self.loading_spinner:
-            self.loading_spinner.stop()
-            self.loading_spinner.hide()
-
-    def _setup_drop_indicator(self):
-        self.drop_indicator.setStyleSheet(f"""
-            QLabel {{
-                background: {COLORS['info']};
-                color: white;
-                padding: 10px;
-                border-radius: 5px;
-            }}
-        """)
-        self.drop_indicator.setText("Drop image here")
-        self.drop_indicator.setAlignment(Qt.AlignCenter)
-
-    def dragEnterEvent(self, event):
-        print("Dragging")
-        if event.mimeData().hasImage() or event.mimeData().hasUrls():
-            event.accept()
-            self.show_drop_indicator()
-        else:
-            event.ignore()
-
-    def dragLeaveEvent(self, event):
-        self.hide_drop_indicator()
-
-    def show_drop_indicator(self):
-        if self.drop_indicator:
-            self.drop_indicator.show()
-            # Center the indicator
-            self.drop_indicator.move(
-                (self.width() - self.drop_indicator.width()) // 2,
-                (self.height() - self.drop_indicator.height()) // 2
-            )
-
-    def hide_drop_indicator(self):
-        if self.drop_indicator:
-            self.drop_indicator.hide()
-
-class MainController:
-    def __init__(self, window):
-        self.window = window
-        self.current_thread = None
-        
-
-# Add a custom loading spinner widget
-class QProgressIndicator(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.angle = 0
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.rotate)
-        self.setFixedSize(40, 40)
-
-    def rotate(self):
-        self.angle = (self.angle + 30) % 360
-        self.update()
-
-    def start(self):
-        self.timer.start(100)
-
-    def stop(self):
-        self.timer.stop()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        
-        painter.translate(self.width() / 2, self.height() / 2)
-        painter.rotate(self.angle)
-        
-        painter.setPen(QPen(QColor(COLORS['primary']), 3))
-        painter.drawArc(-15, -15, 30, 30, 0, 300 * 16)
-
-
-class InfoButton(QPushButton):
-    def __init__(self, tooltip, parent=None):
-        super().__init__("ⓘ", parent)
-        self.setToolTip(tooltip)
-        self.setFixedSize(16, 16)
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background: {COLORS['info']};
-                border-radius: 8px;
-                color: white;
-                font-size: 20px;
-            }}
-            QPushButton:hover {{
-                background: {COLORS['primary']};
-            }}
-        """)
-
-class SliderWithTooltip(QSlider):
-    def __init__(self, orientation, parent=None):
-        super().__init__(orientation, parent)
-        self.setMouseTracking(True)
-
-    def mouseMoveEvent(self, event):
-        value = self.value_at_pos(event.pos())
-        QToolTip.showText(event.globalPos(), str(value), self)
-        super().mouseMoveEvent(event)
-
-    def value_at_pos(self, pos):
-        opt = QStyleOptionSlider()
-        self.initStyleOption(opt)
-        groove = self.style().subControlRect(
-            QStyle.CC_Slider, opt, QStyle.SC_SliderGroove, self)
-        handle = self.style().subControlRect(
-            QStyle.CC_Slider, opt, QStyle.SC_SliderHandle, self)
-
-        if self.orientation() == Qt.Horizontal:
-            slider_length = handle.width()
-            slider_min = groove.x()
-            slider_max = groove.right() - slider_length + 1
-            pos = pos.x()
-        else:
-            slider_length = handle.height()
-            slider_min = groove.y()
-            slider_max = groove.bottom() - slider_length + 1
-            pos = pos.y()
-
-        return QStyle.sliderValueFromPosition(
-            self.minimum(), self.maximum(), pos - slider_min,
-            slider_max - slider_min, opt.upsideDown)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

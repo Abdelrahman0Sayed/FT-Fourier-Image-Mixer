@@ -80,8 +80,8 @@ def draw_rectangle(self, viewers, rect_size, region):
                 
                 painter = QPainter(new_pixmap)
 
-                painter.setOpacity(0.8) 
-                painter.setBrush(QColor(0, 0, 0, 128))  # Red with alpha 128 (out of 255)
+                painter.setOpacity(1) 
+                painter.setBrush(QColor(0, 0, 0, 200))  # Red with alpha 128 (out of 255)
 
 
                 self.rectSize = int(rect_size)

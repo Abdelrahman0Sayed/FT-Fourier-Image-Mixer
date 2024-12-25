@@ -37,7 +37,7 @@ def loadImage(self, parent):
             row, column = grayScaledImage.shape
             print(row, column)
             print(parent.minimumSize)
-
+            
             # This means that's the first image 
             if parent.minimumSize == (0, 0):
                 parent.minimumSize = (row, column)
@@ -47,8 +47,8 @@ def loadImage(self, parent):
                 print(parent.minimumSize)
 
             #cv2.resize(grayScaledImage, (column,row))
-            unify_images(self, parent.viewers, parent.minimumSize)
-            #self.imageData = cv2.resize(self.imageData, (600,600))
+            #unify_images(self, parent.viewers, parent.minimumSize)
+            self.imageData = cv2.resize(self.imageData, (600,600))
         
             return grayScaledImage, self.imageData
         
