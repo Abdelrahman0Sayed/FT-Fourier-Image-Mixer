@@ -47,8 +47,8 @@ def loadImage(self, parent):
                 print(parent.minimumSize)
 
             #cv2.resize(grayScaledImage, (column,row))
-            #unify_images(self, parent.viewers, parent.minimumSize)
-            self.imageData = cv2.resize(self.imageData, (600,600))
+            unify_images(self, parent.viewers, parent.minimumSize)
+            #self.imageData = cv2.resize(self.imageData, (600,600))
         
             return grayScaledImage, self.imageData
         
@@ -124,7 +124,7 @@ def displayFrequencyComponent(self, PlottedComponent):
         label_height = self.ftComponentLabel.height()
         label_width = self.ftComponentLabel.width()
         
-        pixmap = pixmap.scaled(label_height, label_width, Qt.IgnoreAspectRatio)
+        pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
         self.magnitudeImage = pixmap
         self.ftComponentLabel.setPixmap(pixmap)
         
@@ -149,7 +149,7 @@ def displayFrequencyComponent(self, PlottedComponent):
         label_height = self.ftComponentLabel.height()
         label_width = self.ftComponentLabel.width()
         
-        pixmap = pixmap.scaled(label_height, label_width, Qt.KeepAspectRatio)
+        pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
         self.phaseImage = pixmap
         
         self.ftComponentLabel.setPixmap(pixmap)
@@ -170,7 +170,7 @@ def displayFrequencyComponent(self, PlottedComponent):
         label_height = self.ftComponentLabel.height()
         label_width = self.ftComponentLabel.width()
         
-        pixmap = pixmap.scaled(label_height, label_width, Qt.KeepAspectRatio)
+        pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
         self.realImage = pixmap
         
         self.ftComponentLabel.setPixmap(pixmap)
@@ -189,7 +189,7 @@ def displayFrequencyComponent(self, PlottedComponent):
         label_height = self.ftComponentLabel.height()
         label_width = self.ftComponentLabel.width()
         
-        pixmap = pixmap.scaled(label_height, label_width, Qt.KeepAspectRatio)
+        pixmap = pixmap.scaled(300, 300, Qt.ignoreAspectRatio)
         self.imaginaryImage = pixmap
         self.ftComponentLabel.setPixmap(pixmap)
     

@@ -16,7 +16,10 @@ from PyQt5.QtGui import *
 from PyQt5 import QtCore, QtGui, QtWidgets
 from mixer_functions import mix_magnitude_phase, mix_real_imaginary
 from control_functions import draw_rectangle, clear_rectangle
+from ImageDisplay import ImageDisplay
 import logging
+from ResizableRect import ResizableRect
+
 
 logging.basicConfig(
     level=logging.DEBUG,  # Set the logging level
@@ -845,57 +848,8 @@ class MainController:
         self.window = window
         self.current_thread = None
         
-from io import BytesIO
-import sys
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QMenu, QAction, QToolTip
-from functools import partial
-from Image_functions import loadImage, imageFourierTransform, displayFrequencyComponent, unify_images , convert_data_to_image, convet_mixed_to_qImage
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5 import QtCore, QtGui, QtWidgets
-from MixerUI import ModernWindow
-from ImageDisplay import ImageDisplay
-import logging
 
 
-
-
-logging.basicConfig(
-    level=logging.DEBUG,  # Set the logging level
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    filename="app.log",  # Log to a file
-    filemode="a",  # Append to the file; use "w" for overwriting
-)
-
-COLORS = {
-    'background': '#1E1E1E',  # Darker background
-    'surface': '#252526',     # Slightly lighter surface
-    'primary': '#007ACC',     # Keep the blue accent
-    'secondary': '#3E3E42',   # Darker secondary
-    'text': '#FFFFFF',        # Brighter text
-    'border': '#3E3E42',      # Subtler borders
-    'hover': '#2D2D30',       # Subtle hover state
-    'success': '#4CAF50',
-    'warning': '#FFA726',
-    'info': '#29B6F6'
-}
-
-
-# Add to COLORS dictionary
-COLORS.update({
-    'hover': '#404040',
-    'success': '#4CAF50', 
-    'warning': '#FFA726',
-    'info': '#29B6F6'
-})
 
 
 class ImageViewerWidget(ModernWindow):
@@ -919,8 +873,8 @@ class ImageViewerWidget(ModernWindow):
         self._ft_phase = None
         self._ft_real = None
         self._ft_imaginary = None
-        self.brightness = 0  
-        self.contrast = 0
+        self.brightness = 0 
+        self.contrast = 1 
         self.dragging = False
         self.last_mouse_pos = None
         self.last_pos = None
@@ -934,30 +888,11 @@ class ImageViewerWidget(ModernWindow):
         self.dragging = False
         self.last_pos = None
 
-        # Initialize rectangle for drawing
-        self.rect_item = QGraphicsRectItem(0, 0, 300, 300)  # Initial rectangle at (0, 0) with size 300x300
-        self.rect_item.setPen(Qt.red)
-        self.rect_item.setBrush(Qt.transparent)
-
-        # Create a scene for the rectangle (we'll update this later)
-        self.scene = QGraphicsScene(self)
-        self.scene.addItem(self.rect_item)
-
-        # Create a view to display the scene containing the rectangle
-        self.view = QGraphicsView(self.scene, self)
-        self.view.setGeometry(100, 100, 500, 500)  # Example size for the view
 
 
-        self.resizing_edge = None  # For resizing logic
-        self.brightness = 0
-        self.contrast = 1
-        self.imageData = None  # Example image data for processing (should be set from the original image)
-
-
-
-        # Call the _setup_ui method specific to ImageViewerWidget
         self.build_ui(title)
         self._setup_animations()
+
 
 
     def build_ui(self, title):
@@ -1036,6 +971,10 @@ class ImageViewerWidget(ModernWindow):
             """)
             ft_label = QLabel("Fourier Transform Component")
             ft_section.addWidget(ft_label)
+            # Create a QGraphicsView overlay for the label
+            
+
+            
             ft_section.addWidget(self.ftComponentLabel)
             displays_layout.addLayout(ft_section)
             # Add displays layout to main layout
@@ -1065,6 +1004,9 @@ class ImageViewerWidget(ModernWindow):
         self.progress.hide()
         layout.addWidget(self.progress)
 
+
+
+
     def find_parent_window(self):
         # Get the top-level window
         parent = self.parentWidget()
@@ -1090,10 +1032,8 @@ class ImageViewerWidget(ModernWindow):
                 self.last_pos = event.pos()
                 # No need to check for edges when adjusting brightness, just drag to adjust
             elif self.ftComponentLabel.underMouse():
-                self.dragging = True
-                self.last_pos = event.pos()
-                # Handle rectangle resizing or dragging here
-                self.resizing_edge = self.get_edge_under_mouse(event.pos())
+                pass
+
 
     def mouseMoveEvent(self, event):
         if self.dragging:
@@ -1115,14 +1055,8 @@ class ImageViewerWidget(ModernWindow):
                 displayFrequencyComponent(self, self.component_selector.currentText())
 
             elif self.ftComponentLabel.underMouse():
-                if self.last_pos is None:
-                    self.last_pos = event.pos()
-
-                # Resize or move the rectangle
-                if self.resizing_edge:
-                    self.resize_rect(event.pos())
-                else:
-                    self.move_rect(event.pos())
+                pass
+    
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1130,8 +1064,8 @@ class ImageViewerWidget(ModernWindow):
             self.resizing_edge = None
 
     def adjust_brightness_contrast(self, delta_x, delta_y):
-        brightness_step = 0.4
-        contrast_step = 0.4
+        brightness_step = 0.2
+        contrast_step = 0.2
 
         # X for contrast, Y for brightness
         self.brightness = np.clip(self.brightness + delta_y * brightness_step, -50, 200)
@@ -1158,42 +1092,11 @@ class ImageViewerWidget(ModernWindow):
             pixmap_image = QPixmap.fromImage(q_image)
             label_width = self.originalImageLabel.width()
             label_height = self.originalImageLabel.height()
-            pixmap_image = pixmap_image.scaled(label_width, label_height, Qt.KeepAspectRatio)
+            pixmap_image = pixmap_image.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.originalImageLabel.setPixmap(pixmap_image)
 
             return adjusted_image
 
-    def get_edge_under_mouse(self, pos):
-        rect = self.rect_item.rect()
-        if rect.adjusted(-5, -5, 5, 5).contains(pos):  # Checking if we are close to the edge
-            return 'resize'
-        return None
-
-    def resize_rect(self, mouse_pos):
-        rect = self.rect_item.rect()
-
-        # Resize the rectangle based on mouse position
-        new_width = mouse_pos.x() - rect.left()
-        new_height = mouse_pos.y() - rect.top()
-
-        # Update the rectangle size
-        if new_width > 0 and new_height > 0:
-            self.rect_item.setRect(QRect(rect.topLeft(), QSize(new_width, new_height)))
-
-    def move_rect(self, mouse_pos):
-        rect = self.rect_item.rect()
-
-        # Move the rectangle to follow the mouse position
-        delta_x = mouse_pos.x() - self.last_pos.x()
-        delta_y = mouse_pos.y() - self.last_pos.y()
-
-        self.rect_item.setRect(rect.adjusted(delta_x, delta_y, delta_x, delta_y))
-        self.last_pos = mouse_pos
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        self.scene.render(painter)  # Render the scene (which contains the rectangle)
-        super().paintEvent(event)
 
 
     def _setup_zoom_controls(self):
