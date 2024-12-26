@@ -446,25 +446,23 @@ class BeamformingSimulator(QMainWindow):
             # Calculate distance to all field points
             distance = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
             
-            # Calculate the new wave phase at each point based on distance
-            wave_phase = k * distance
-            
-            # Calculate steering phase based on geometry
+            # Calculate steering phase with corrected sign convention
             if geometry == "Linear":
-                steer_phase = k * (x[i] * np.sin(steer_angle))
+                # Match far field convention for steering
+                steer_phase = -k * (x[i] * np.sin(steer_angle))  # Add negative sign
             else:  # Curved array
                 r_steer = np.sqrt((x[i] * np.sin(steer_angle))**2 + (y[i] * np.cos(steer_angle))**2)
-                steer_phase = k * r_steer
+                steer_phase = -k * r_steer  # Add negative sign
             
-            # Calculate wave amplitude
+            wave_phase = k * distance
+            # Calculate wave amplitude with corrected phase
             near_field = 1.0 / (distance + wavelength/10)
             far_field = 1.0 / np.sqrt(distance + wavelength/10)
-            # ensure transition factor is between 0 and 1
             transition_factor = np.clip(distance / transition_dist, 0, 1)
             amplitude = np.where(distance < transition_dist, near_field, far_field)
             
-            wave = amplitude * np.sqrt(freq_scale)  # Wave strength
-            phase = np.exp(1j * (wave_phase - steer_phase))  # Wave phase
+            wave = amplitude * np.sqrt(freq_scale)
+            phase = np.exp(1j * (wave_phase + steer_phase))  # Change minus to plus
             interference += wave * phase * transition_factor
 
     def _normalize_pattern(self, pattern):
@@ -527,6 +525,11 @@ class BeamformingSimulator(QMainWindow):
     def update_pattern_plot(self, theta, pattern):
         self.pattern_fig.clear()
         ax = self.pattern_fig.add_subplot(111, projection='polar')
+
+        # Set 0° at top and clockwise direction
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
+        
         
         # Convert to dB with better dynamic range
         pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
@@ -593,11 +596,12 @@ class BeamformingSimulator(QMainWindow):
                                     alpha=0.7))
         
         # Enhanced angle markers
-        angles = np.arange(0, 360, 15)
-        ax.set_xticks(np.radians(angles))
-        ax.set_xticklabels([f'{int(ang)}°' for ang in angles],
+        angles = np.arange(90, 450, 15)  # Shifted by 90° to start from top
+        ax.set_xticks(np.radians(angles % 360))
+        ax.set_xticklabels([f'{int(ang % 360)}°' for ang in angles],
                         fontsize=10,
                         color='white')
+        
         
         # Mark steering angles with clear indicators
         for unit in self.array_units:
