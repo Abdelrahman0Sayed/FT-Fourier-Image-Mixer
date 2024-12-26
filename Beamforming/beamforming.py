@@ -977,7 +977,7 @@ class BeamformingSimulator(QMainWindow):
                             "num_elements": 20,
                             "element_spacing": 0.25,
                             "steering_angle": 0,
-                            "geometry_type": "Linear",
+                            "geometry_type": "Curved",
                             "curvature_factor": 1.5,
                             "operating_freqs": [5],
                             "x_pos": 0,
