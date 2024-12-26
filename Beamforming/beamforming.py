@@ -440,30 +440,35 @@ class BeamformingSimulator(QMainWindow):
             pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
 
     def _calculate_interference_field(self, interference, x, y, k, wavelength, 
-                                    steer_angle, transition_dist, freq_scale, geometry):
-        # For each antenna element
+                            steer_angle, transition_dist, freq_scale, geometry):
+        # Calculate array center
+        array_center_x = np.mean(x)
+        array_center_y = np.mean(y)
+
+        # Create rotated coordinate system
+        theta = -steer_angle  # Negative for clockwise rotation
+        
+        # Rotate entire field coordinates
+        X_rot = (self.X - array_center_x) * np.cos(theta) - (self.Y - array_center_y) * np.sin(theta) + array_center_x
+        Y_rot = (self.X - array_center_x) * np.sin(theta) + (self.Y - array_center_y) * np.cos(theta) + array_center_y
+        
+        # Calculate field for each element
         for i in range(len(x)):
-            # Calculate distance to all field points
-            distance = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
+            # Distance in rotated coordinates
+            distance = np.sqrt((X_rot - x[i])**2 + (Y_rot - y[i])**2)
             
-            # Calculate steering phase with corrected sign convention
-            if geometry == "Linear":
-                # Match far field convention for steering
-                steer_phase = -k * (x[i] * np.sin(steer_angle))  # Add negative sign
-            else:  # Curved array
-                r_steer = np.sqrt((x[i] * np.sin(steer_angle))**2 + (y[i] * np.cos(steer_angle))**2)
-                steer_phase = -k * r_steer  # Add negative sign
-            
+            # Phase calculation without separate steering
             wave_phase = k * distance
-            # Calculate wave amplitude with corrected phase
-            near_field = 1.0 / (distance + wavelength/10)
-            far_field = 1.0 / np.sqrt(distance + wavelength/10)
-            transition_factor = np.clip(distance / transition_dist, 0, 1)
-            amplitude = np.where(distance < transition_dist, near_field, far_field)
             
+            # Amplitude calculation
+            amplitude = np.where(distance < transition_dist,
+                            1.0 / (distance + wavelength/10),  # Near field
+                            1.0 / np.sqrt(distance + wavelength/10))  # Far field
+            
+            # Add element contribution
             wave = amplitude * np.sqrt(freq_scale)
-            phase = np.exp(1j * (wave_phase + steer_phase))  # Change minus to plus
-            interference += wave * phase * transition_factor
+            phase = np.exp(1j * wave_phase)
+            interference += wave * phase * np.clip(distance / transition_dist, 0, 1)
 
     def _normalize_pattern(self, pattern):
         pattern = np.abs(pattern)
