@@ -112,11 +112,11 @@ def displayFrequencyComponent(self, PlottedComponent):
         # Take the Magnitude as log scale
         
         
-        #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-        ftMagnitudes = self.ftMagnitudes
-
-        ftLog = 15 * np.log(ftMagnitudes + 1e-10).astype(np.uint8)
-        ftNormalized = ftLog / ftLog.max() * 255
+        ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+        #ftMagnitudes = self.ftMagnitudes
+        ftLog = 15 * np.log(ftMagnitudes + 1e-10)
+        ftNormalized = (255 * (ftLog / ftLog.max())).astype(np.uint8)
+        
         pil_image = Image.fromarray(np.uint8(ftNormalized)) 
         qimage = convert_from_pil_to_qimage(pil_image)
         qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
@@ -174,6 +174,7 @@ def displayFrequencyComponent(self, PlottedComponent):
         self.realImage = pixmap
         
         self.ftComponentLabel.setPixmap(pixmap)
+    
     elif PlottedComponent == "FT Imaginary":
         
         #ftImaginaries = np.fft.fftshift(self.ftImaginary)

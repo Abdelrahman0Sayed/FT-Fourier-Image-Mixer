@@ -1,92 +1,126 @@
-from PyQt5.QtWidgets import QGraphicsRectItem
-from PyQt5.QtGui import QPen, QCursor
+import sys
+from PyQt5.QtWidgets import (
+    QApplication, QLabel, QGraphicsView, QGraphicsScene,
+    QGraphicsRectItem, QVBoxLayout, QMainWindow, QGraphicsItem
+)
+from PyQt5.QtGui import QPixmap, QPen, QColor
 from PyQt5.QtCore import Qt, QRectF
 
 class ResizableRect(QGraphicsRectItem):
-    # Flags to handle selection and interaction with the rectangle
-    TopLeft = 0
-    TopRight = 1
-    BottomLeft = 2
-    BottomRight = 3
-    Top = 4
-    Bottom = 5
-    Left = 6
-    Right = 7
-
-    def __init__(self, x, y, width, height):
-        super().__init__(x, y, width, height)
-        self.setFlags(QGraphicsRectItem.ItemIsSelectable | QGraphicsRectItem.ItemIsMovable)
-        self.setPen(QPen(Qt.red, 2))
-        self.setBrush(Qt.transparent)
-        self.resizing = None  # To track which corner/edge is being resized
-
-    def mousePressEvent(self, event):
-        """Detects which part of the rectangle is being clicked for resizing."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.ItemIsMovable, True)
+        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
+        self.setAcceptHoverEvents(True)
+        self.handle_size = 8
+        self.handles = {
+            "top-left": None,
+            "top-right": None,
+            "bottom-left": None,
+            "bottom-right": None
+        }
+        self.current_handle = None
+        self._pen = QPen(Qt.black, 1)
+        self._brush = QColor(255, 255, 255, 100)  # Semi-transparent white
+        
+    def paint(self, painter, option, widget=None):
+        super().paint(painter, option, widget)
+        painter.setPen(self._pen)
+        painter.setBrush(self._brush)
         rect = self.rect()
-        cursor_pos = event.pos()
-
-        # Check for corner selection
-        if rect.topLeft().x() - 10 < cursor_pos.x() < rect.topLeft().x() + 10 and \
-           rect.topLeft().y() - 10 < cursor_pos.y() < rect.topLeft().y() + 10:
-            self.resizing = self.TopLeft
-        elif rect.topRight().x() - 10 < cursor_pos.x() < rect.topRight().x() + 10 and \
-             rect.topRight().y() - 10 < cursor_pos.y() < rect.topRight().y() + 10:
-            self.resizing = self.TopRight
-        elif rect.bottomLeft().x() - 10 < cursor_pos.x() < rect.bottomLeft().x() + 10 and \
-             rect.bottomLeft().y() - 10 < cursor_pos.y() < rect.bottomLeft().y() + 10:
-            self.resizing = self.BottomLeft
-        elif rect.bottomRight().x() - 10 < cursor_pos.x() < rect.bottomRight().x() + 10 and \
-             rect.bottomRight().y() - 10 < cursor_pos.y() < rect.bottomRight().y() + 10:
-            self.resizing = self.BottomRight
-        # Check for edge selection
-        elif rect.top() - 10 < cursor_pos.y() < rect.top() + 10:
-            self.resizing = self.Top
-        elif rect.bottom() - 10 < cursor_pos.y() < rect.bottom() + 10:
-            self.resizing = self.Bottom
-        elif rect.left() - 10 < cursor_pos.x() < rect.left() + 10:
-            self.resizing = self.Left
-        elif rect.right() - 10 < cursor_pos.x() < rect.right() + 10:
-            self.resizing = self.Right
-        else:
-            self.resizing = None  # No resizing
-
+        
+        # Draw resize handles
+        handle_size = self.handle_size
+        for pos in self.handles.keys():
+            self.handles[pos] = self.get_handle_rect(pos, handle_size)
+            painter.drawRect(self.handles[pos])
+    
+    def get_handle_rect(self, pos, size):
+        rect = self.rect()
+        if pos == "top-left":
+            return QRectF(rect.left(), rect.top(), size, size)
+        elif pos == "top-right":
+            return QRectF(rect.right() - size, rect.top(), size, size)
+        elif pos == "bottom-left":
+            return QRectF(rect.left(), rect.bottom() - size, size, size)
+        elif pos == "bottom-right":
+            return QRectF(rect.right() - size, rect.bottom() - size, size, size)
+    
+    def hoverMoveEvent(self, event):
+        cursor = Qt.ArrowCursor
+        for pos, handle in self.handles.items():
+            if handle.contains(event.pos()):
+                if pos in ["top-left", "bottom-right"]:
+                    cursor = Qt.SizeFDiagCursor
+                elif pos in ["top-right", "bottom-left"]:
+                    cursor = Qt.SizeBDiagCursor
+                break
+        self.setCursor(cursor)
+        super().hoverMoveEvent(event)
+    
+    def mousePressEvent(self, event):
+        for pos, handle in self.handles.items():
+            if handle.contains(event.pos()):
+                self.current_handle = pos
+                break
         super().mousePressEvent(event)
-
+    
     def mouseMoveEvent(self, event):
-        """Handles the mouse dragging to resize the rectangle."""
-        if self.resizing is not None:
+        if self.current_handle:
             rect = self.rect()
             delta = event.pos() - event.lastPos()
-
-            if self.resizing == self.TopLeft:
-                rect.setTopLeft(rect.topLeft() + delta.toPoint())
-            elif self.resizing == self.TopRight:
-                rect.setTopRight(rect.topRight() + delta.toPoint())
-            elif self.resizing == self.BottomLeft:
-                rect.setBottomLeft(rect.bottomLeft() + delta.toPoint())
-            elif self.resizing == self.BottomRight:
-                rect.setBottomRight(rect.bottomRight() + delta.toPoint())
-            elif self.resizing == self.Top:
-                rect.setTop(rect.top() + delta.y())
-            elif self.resizing == self.Bottom:
-                rect.setBottom(rect.bottom() + delta.y())
-            elif self.resizing == self.Left:
-                rect.setLeft(rect.left() + delta.x())
-            elif self.resizing == self.Right:
-                rect.setRight(rect.right() + delta.x())
-
-            self.setRect(rect)  # Update the rectangle size
-
-        super().mouseMoveEvent(event)
-
+            if self.current_handle == "top-left":
+                rect.setTopLeft(rect.topLeft() + delta)
+            elif self.current_handle == "top-right":
+                rect.setTopRight(rect.topRight() + delta)
+            elif self.current_handle == "bottom-left":
+                rect.setBottomLeft(rect.bottomLeft() + delta)
+            elif self.current_handle == "bottom-right":
+                rect.setBottomRight(rect.bottomRight() + delta)
+            self.setRect(rect)
+        else:
+            super().mouseMoveEvent(event)
+    
     def mouseReleaseEvent(self, event):
-        """Reset resizing mode after mouse release."""
-        self.resizing = None
+        self.current_handle = None
         super().mouseReleaseEvent(event)
 
-    def paint(self, painter, option, widget=None):
-        """Optional: Customize appearance (highlight edges when hovering over them)."""
-        super().paint(painter, option, widget)
-        if self.resizing:
-            painter.setPen(QPen(Qt.green, 2))
-            painter.drawRect(self.rect())
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        
+        # Create main layout
+        self.label = QLabel()
+        pixmap = QPixmap(400, 300)
+        pixmap.fill(Qt.white)
+        self.label.setPixmap(pixmap)
+        
+        self.view = QGraphicsView()
+        self.scene = QGraphicsScene()
+        self.view.setScene(self.scene)
+        self.scene.setSceneRect(0, 0, 400, 300)
+        
+        # Add resizable rectangle
+        rect_item = ResizableRect(50, 50, 100, 100)
+        rect_item.setPen(QPen(Qt.red, 2))
+        rect_item.setBrush(QColor(255, 0, 0, 100))  # Semi-transparent red
+        self.scene.addItem(rect_item)
+        
+        # Add widgets to layout
+        layout = QVBoxLayout()
+        layout.addWidget(self.label)
+        layout.addWidget(self.view)
+        
+        # Central widget
+        central_widget = QLabel()
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())

@@ -20,7 +20,6 @@ from ImageDisplay import ImageDisplay
 import logging
 from ResizableRect import ResizableRect
 
-
 logging.basicConfig(
     level=logging.DEBUG,  # Set the logging level
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -52,6 +51,7 @@ COLORS.update({
     'info': '#29B6F6'
 })
 
+
 class ModernWindow(QMainWindow):
     
     def __init__(self, imageWidget=None , skip_setup_ui=False):
@@ -62,7 +62,6 @@ class ModernWindow(QMainWindow):
         self.imageWidget = imageWidget
         self.viewers = []
         self.rectSize = 0
-
     
 
         self.outputViewers = []
@@ -847,9 +846,6 @@ class MainController:
     def __init__(self, window):
         self.window = window
         self.current_thread = None
-        
-
-
 
 
 class ImageViewerWidget(ModernWindow):
@@ -1011,6 +1007,7 @@ class ImageViewerWidget(ModernWindow):
         # Get the top-level window
         parent = self.parentWidget()
         while parent:
+            print("My Parent is", parent)
             if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
                 return parent
             parent = parent.parentWidget()
@@ -1230,6 +1227,7 @@ class ImageViewerWidget(ModernWindow):
             self.originalImageLabel.setPixmap(self.image.scaled(
                 scaled_size.toSize(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
 
+  
 
 
 if __name__ == '__main__':
