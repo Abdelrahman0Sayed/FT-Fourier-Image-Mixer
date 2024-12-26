@@ -1,3 +1,4 @@
+
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
@@ -34,23 +35,70 @@ class ScenarioType(Enum):
     ABLATION = "Tumor Ablation"
 
 class ModernSlider(QWidget):
-    """Custom slider widget with value display"""
+    """Custom slider widget with enhanced visual styling"""
     valueChanged = pyqtSignal(float)
     
     def __init__(self, minimum, maximum, value, step=0.1, suffix=""):
         super().__init__()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
         
+        # Create main slider
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(int(minimum/step), int(maximum/step))
         self.slider.setValue(int(value/step))
+        self.slider.setTickPosition(QSlider.TicksBelow)
+        self.slider.setTickInterval(int((maximum-minimum)/(10*step)))
         self.step = step
         self.suffix = suffix
         
+        # Enhanced value label
         self.value_label = QLabel(f"{value:.1f}{suffix}")
-        self.value_label.setFixedWidth(60)
+        self.value_label.setFixedWidth(70)
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.value_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                background-color: #2d2d2d;
+                border: 1px solid #3a3a3a;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 12px;
+            }
+        """)
+        
+        # Apply slider styling
+        self.slider.setStyleSheet("""
+            QSlider {
+                height: 30px;
+            }
+            QSlider::groove:horizontal {
+                height: 4px;
+                background: #3a3a3a;
+                margin: 0 12px;
+            }
+            QSlider::handle:horizontal {
+                background: #2196f3;
+                border: none;
+                width: 16px;
+                height: 16px;
+                margin: -6px 0;
+                border-radius: 8px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #42a5f5;
+            }
+            QSlider::sub-page:horizontal {
+                background: #2196f3;
+            }
+            QSlider::tick-mark:horizontal {
+                color: white;
+                background: white;
+                width: 1px;
+                height: 3px;
+            }
+        """)
         
         layout.addWidget(self.slider)
         layout.addWidget(self.value_label)
@@ -61,7 +109,32 @@ class ModernSlider(QWidget):
     def _on_slider_changed(self, value):
         actual_value = value * self.step
         self.value_label.setText(f"{actual_value:.1f}{self.suffix}")
+        self.value_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                background-color: #1976d2;
+                border: 1px solid #2196f3;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 12px;
+            }
+        """)
         self.valueChanged.emit(actual_value)
+        
+        # Reset label style after delay
+        QTimer.singleShot(200, self._reset_label_style)
+        
+    def _reset_label_style(self):
+        self.value_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                background-color: #2d2d2d;
+                border: 1px solid #3a3a3a;
+                border-radius: 4px;
+                padding: 4px;
+                font-size: 12px;
+            }
+        """)
         
     def value(self):
         return self.slider.value() * self.step
@@ -440,32 +513,35 @@ class BeamformingSimulator(QMainWindow):
             pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
 
     def _calculate_interference_field(self, interference, x, y, k, wavelength, 
-                                    steer_angle, transition_dist, freq_scale, geometry):
-        # For each antenna element
+                            steer_angle, transition_dist, freq_scale, geometry):
+        # Calculate array center
+        array_center_x = np.mean(x)
+        array_center_y = np.mean(y)
+
+        # Create rotated coordinate system
+        theta = -steer_angle  # Negative for clockwise rotation
+        
+        # Rotate entire field coordinates
+        X_rot = (self.X - array_center_x) * np.cos(theta) - (self.Y - array_center_y) * np.sin(theta) + array_center_x
+        Y_rot = (self.X - array_center_x) * np.sin(theta) + (self.Y - array_center_y) * np.cos(theta) + array_center_y
+        
+        # Calculate field for each element
         for i in range(len(x)):
-            # Calculate distance to all field points
-            distance = np.sqrt((self.X - x[i])**2 + (self.Y - y[i])**2)
+            # Distance in rotated coordinates
+            distance = np.sqrt((X_rot - x[i])**2 + (Y_rot - y[i])**2)
             
-            # Calculate the new wave phase at each point based on distance
+            # Phase calculation without separate steering
             wave_phase = k * distance
             
-            # Calculate steering phase based on geometry
-            if geometry == "Linear":
-                steer_phase = k * (x[i] * np.sin(steer_angle))
-            else:  # Curved array
-                r_steer = np.sqrt((x[i] * np.sin(steer_angle))**2 + (y[i] * np.cos(steer_angle))**2)
-                steer_phase = k * r_steer
+            # Amplitude calculation
+            amplitude = np.where(distance < transition_dist,
+                            1.0 / (distance + wavelength/10),  # Near field
+                            1.0 / np.sqrt(distance + wavelength/10))  # Far field
             
-            # Calculate wave amplitude
-            near_field = 1.0 / (distance + wavelength/10)
-            far_field = 1.0 / np.sqrt(distance + wavelength/10)
-            # ensure transition factor is between 0 and 1
-            transition_factor = np.clip(distance / transition_dist, 0, 1)
-            amplitude = np.where(distance < transition_dist, near_field, far_field)
-            
-            wave = amplitude * np.sqrt(freq_scale)  # Wave strength
-            phase = np.exp(1j * (wave_phase - steer_phase))  # Wave phase
-            interference += wave * phase * transition_factor
+            # Add element contribution
+            wave = amplitude * np.sqrt(freq_scale)
+            phase = np.exp(1j * wave_phase)
+            interference += wave * phase * np.clip(distance / transition_dist, 0, 1)
 
     def _normalize_pattern(self, pattern):
         pattern = np.abs(pattern)
@@ -525,17 +601,34 @@ class BeamformingSimulator(QMainWindow):
         self.interference_canvas.draw()
 
     def update_pattern_plot(self, theta, pattern):
+        """Visualizes the beam pattern in polar coordinates with detailed annotations.
+        
+        Parameters:
+            theta: Array of angles in radians
+            pattern: Array of beam pattern magnitudes
+        
+        The plot shows:
+            - Main lobe (>-3dB) and side lobes
+            - Power levels in dB scale
+            - Beam width and directivity metrics
+            - Steering angle indicators
+        """
+        # 1. Setup polar plot
         self.pattern_fig.clear()
         ax = self.pattern_fig.add_subplot(111, projection='polar')
+        ax.set_theta_zero_location('N')  # 0° at top
+        ax.set_theta_direction(-1)       # Clockwise rotation
         
-        # Convert to dB with better dynamic range
-        pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
-        pattern_db = np.clip(pattern_db, -40, 0)
-        normalized_pattern = pattern_db + 40  # Shift to positive values
-        # Fill regions with transparency for better visualization
-        main_lobe_mask = pattern_db >= -3
-        side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
+        # 2. Convert pattern to dB scale
+        pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))  # Convert to dB
+        pattern_db = np.clip(pattern_db, -40, 0)                   # Limit dynamic range
+        normalized_pattern = pattern_db + 40  # Shift to positive values for display
         
+        # 3. Identify main and side lobes
+        main_lobe_mask = pattern_db >= -3                    # Main beam >-3dB
+        side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)  # Side lobes -20dB to -3dB
+        
+        # 4. Plot lobes with different colors
         ax.fill_between(theta, 0, normalized_pattern, 
                     where=main_lobe_mask,
                     color='#2196f3', alpha=0.3, 
@@ -544,94 +637,94 @@ class BeamformingSimulator(QMainWindow):
                     where=side_lobe_mask,
                     color='#ff9800', alpha=0.2, 
                     label='Side Lobes')
+
+        # 6. Calculate and display beam metrics
+        self._show_beam_metrics(ax, theta, pattern_db)
         
-        # Add dB circles with clear annotations
+        # 7. Add angle markers around plot
+        angles = np.arange(90, 450, 15)  # 15° steps, starting from top
+        ax.set_xticks(np.radians(angles % 360))
+        ax.set_xticklabels([f'{int(ang % 360)}°' for ang in angles],
+                        fontsize=10, color='white')
+        
+        # 8. Show steering angle indicators for each unit
+        self._add_steering_indicators(ax)
+        
+        # 9. Final styling
+        ax.grid(True, color='white', alpha=0.1, linestyle=':')
+        ax.set_ylim(0, 45)
+        ax.set_title('Beam Pattern Analysis',
+                    color='white', pad=20,
+                    fontsize=14, fontweight='bold')
+        ax.set_facecolor('#1e1e1e')
+        ax.tick_params(colors='white')
+        
+        self.pattern_canvas.draw()
+
+    def _add_power_level_indicators(self, ax):
+        """Adds concentric circles showing power levels in dB."""
         db_levels = [-3, -6, -10, -20, -30, -40]
         for db in db_levels:
+            # Add circle for each power level
             circle = plt.Circle((0, 0), 40 + db,
-                            fill=False,
-                            color='white',
-                            linestyle='--',
-                            alpha=0.3)
+                            fill=False, color='white',
+                            linestyle='--', alpha=0.3)
             ax.add_artist(circle)
-
+            
+            # Label major power levels
             if db in [-3, -10, -20]:
                 ax.text(np.pi/4, 40 + db,
                     f'{db} dB',
                     color='white',
-                    ha='left',
-                    va='bottom',
+                    ha='left', va='bottom',
                     bbox=dict(facecolor='#2d2d2d',
                             alpha=0.7,
                             edgecolor='none'))
-        
-        #display key metrics
-        half_power = -3
+
+    def _show_beam_metrics(self, ax, theta, pattern_db):
+        """Calculates and displays key beam pattern metrics."""
+        half_power = -3  # -3dB power level
         idx_above = np.where(pattern_db > half_power)[0]
+        
         if len(idx_above) > 0:
+            # Calculate beam width
             beam_width = np.abs(np.degrees(theta[idx_above[-1]] - theta[idx_above[0]]))
+            # Calculate directivity
+            directivity = 10*np.log10(1/beam_width*180/np.pi)
+            
+            # Display metrics
             metrics_text = (
                 f'Key Metrics:\n'
                 f'• Beam Width: {beam_width:.1f}°\n'
-                f'• Directivity: {10*np.log10(1/beam_width*180/np.pi):.1f} dB'
+                f'• Directivity: {directivity:.1f} dB'
             )
             ax.text(np.pi/2, 45, metrics_text,
                     color='white',
-                    ha='left',
-                    va='top',
+                    ha='left', va='top',
                     bbox=dict(facecolor='#2d2d2d',
                             alpha=0.9,
                             edgecolor='#404040',
                             boxstyle='round,pad=0.5'))
-            
-            # Add beam width annotation
-            ax.annotate('',
-                    xy=(theta[idx_above[0]], normalized_pattern[idx_above[0]]),
-                    xytext=(theta[idx_above[-1]], normalized_pattern[idx_above[-1]]),
-                    arrowprops=dict(arrowstyle='<->',
-                                    color='white',
-                                    alpha=0.7))
-        
-        # Enhanced angle markers
-        angles = np.arange(0, 360, 15)
-        ax.set_xticks(np.radians(angles))
-        ax.set_xticklabels([f'{int(ang)}°' for ang in angles],
-                        fontsize=10,
-                        color='white')
-        
-        # Mark steering angles with clear indicators
+
+    def _add_steering_indicators(self, ax):
+        """Adds visual indicators for beam steering angles."""
         for unit in self.array_units:
             if unit.enabled and unit.steering_angle != 0:
                 angle = np.radians(unit.steering_angle)
-                # Add steering line
+                
+                # Add steering direction line
                 ax.plot([angle, angle], [0, 40],
                     color='#ff9800',
                     linestyle='--',
                     linewidth=2,
                     alpha=0.7,
                     label=f'Steering {unit.steering_angle}°')
-                # Add steering arc indicator
+                
+                # Add arc indicator
                 arc = np.linspace(angle-np.pi/12, angle+np.pi/12, 100)
                 ax.plot(arc, np.ones_like(arc)*40,
                     color='#ff9800',
                     alpha=0.3)
-        
-        # Enhanced grid with better visibility
-        ax.grid(True, color='white', alpha=0.1, linestyle=':')
-        
-        # Set plot limits and title
-        ax.set_ylim(0, 45)
-        ax.set_title('Beam Pattern Analysis',
-                    color='white',
-                    pad=20,
-                    fontsize=14,
-                    fontweight='bold')
-    
-        # Final styling
-        ax.set_facecolor('#1e1e1e')
-        ax.tick_params(colors='white')
-        
-        self.pattern_canvas.draw()
         
     def update_array_plot(self, x, y):
         self.array_fig.clear()
@@ -1270,3 +1363,4 @@ if __name__ == '__main__':
     window = BeamformingSimulator()
     window.show()
     sys.exit(app.exec_())
+
