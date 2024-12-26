@@ -1,4 +1,3 @@
-
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
@@ -14,6 +13,7 @@ from typing import List, Dict
 from dataclasses import dataclass
 from enum import Enum
 from beam_style import PLOT_STYLE, STYLE_SHEET
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 @dataclass
 class ArrayUnit:
@@ -267,89 +267,6 @@ class BeamformingSimulator(QMainWindow):
         self.geometry_type.currentTextChanged.connect(self.update_pattern)
         self.curvature.valueChanged.connect(self.update_pattern)
         
-    def create_visualization_area(self):
-        viz_widget = QWidget()
-        viz_layout = QVBoxLayout()
-        viz_layout.setSpacing(15)
-        
-        # Title label with modern styling
-        title_label = QLabel("Beamforming Visualization")
-        title_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                padding: 5px;
-                background-color: #2d2d2d;
-                border-radius: 5px;
-            }
-        """)
-        viz_layout.addWidget(title_label)
-        
-        # Create horizontal layout for side-by-side plots
-        plot_layout = QHBoxLayout()
-        
-        # Left side - Pattern and Array plots
-        left_plots = QVBoxLayout()
-        
-        # Beam pattern plot with toolbar
-        pattern_container = QWidget()
-        pattern_layout = QVBoxLayout(pattern_container)
-        self.pattern_fig = Figure(figsize=(6, 4))
-        self.pattern_fig.patch.set_facecolor('#1e1e1e')
-        self.pattern_canvas = FigureCanvasQTAgg(self.pattern_fig)
-        pattern_layout.addWidget(self.pattern_canvas)
-        
-        # Add navigation toolbar
-        pattern_toolbar = NavigationToolbar2QT(self.pattern_canvas, pattern_container)
-        pattern_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
-        pattern_layout.addWidget(pattern_toolbar)
-        left_plots.addWidget(pattern_container)
-        
-        # Array geometry plot with toolbar
-        array_container = QWidget()
-        array_layout = QVBoxLayout(array_container)
-        self.array_fig = Figure(figsize=(6, 2))
-        self.array_fig.patch.set_facecolor('#1e1e1e')
-        self.array_canvas = FigureCanvasQTAgg(self.array_fig)
-        array_layout.addWidget(self.array_canvas)
-        
-        array_toolbar = NavigationToolbar2QT(self.array_canvas, array_container)
-        array_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
-        array_layout.addWidget(array_toolbar)
-        left_plots.addWidget(array_container)
-        
-        plot_layout.addLayout(left_plots)
-        
-        # Right side - Interference map
-        interference_container = QWidget()
-        interference_layout = QVBoxLayout(interference_container)
-        self.interference_fig = Figure(figsize=(6, 6))
-        self.interference_fig.patch.set_facecolor('#1e1e1e')
-        self.interference_canvas = FigureCanvasQTAgg(self.interference_fig)
-        interference_layout.addWidget(self.interference_canvas)
-        
-        interference_toolbar = NavigationToolbar2QT(self.interference_canvas, interference_container)
-        interference_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
-        interference_layout.addWidget(interference_toolbar)
-        plot_layout.addWidget(interference_container)
-        
-        viz_layout.addLayout(plot_layout)
-        
-        # Add colormap selector
-        colormap_layout = QHBoxLayout()
-        colormap_label = QLabel("Colormap:")
-        colormap_label.setStyleSheet("color: white;")
-        self.colormap_selector = QComboBox()
-        self.colormap_selector.addItems(['RdBu_r', 'viridis', 'plasma', 'magma', 'inferno'])
-        self.colormap_selector.currentTextChanged.connect(self.update_colormap)
-        colormap_layout.addWidget(colormap_label)
-        colormap_layout.addWidget(self.colormap_selector)
-        colormap_layout.addStretch()
-        
-        viz_layout.addLayout(colormap_layout)
-        viz_widget.setLayout(viz_layout)
-        self.layout.addWidget(viz_widget)
     
     def update_colormap(self):
         # Re-draw interference plot with new colormap
@@ -387,35 +304,89 @@ class BeamformingSimulator(QMainWindow):
     def create_visualization_area(self):
         viz_widget = QWidget()
         viz_layout = QVBoxLayout()
-        viz_layout.setSpacing(10)
+        viz_layout.setSpacing(15)
         
-        # Create horizontal layout for side-by-side plots
-        plot_layout = QHBoxLayout()
+        # First row - Pattern plots side by side
+        plots_row = QHBoxLayout()
+        plots_row.setSpacing(10)
         
-        # Left side - Pattern and Array plots
-        left_plots = QVBoxLayout()
-        
-        # Beam pattern plot
-        self.pattern_fig = Figure(figsize=(6, 4))
+        # Left - Beam pattern
+        pattern_container = QWidget()
+        pattern_layout = QVBoxLayout(pattern_container)
+        self.pattern_fig = Figure(figsize=(6, 6))
         self.pattern_fig.patch.set_facecolor('#1e1e1e')
         self.pattern_canvas = FigureCanvasQTAgg(self.pattern_fig)
-        left_plots.addWidget(self.pattern_canvas)
+        pattern_layout.addWidget(self.pattern_canvas)
         
-        # Array geometry plot
-        self.array_fig = Figure(figsize=(6, 2))
-        self.array_fig.patch.set_facecolor('#1e1e1e')
-        self.array_canvas = FigureCanvasQTAgg(self.array_fig)
-        left_plots.addWidget(self.array_canvas)
+        pattern_toolbar = NavigationToolbar2QT(self.pattern_canvas, pattern_container)
+        pattern_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
+        pattern_layout.addWidget(pattern_toolbar)
+        plots_row.addWidget(pattern_container)
         
-        plot_layout.addLayout(left_plots)
-        
-        # Right side - Interference map
+        # Right - Interference pattern
+        interference_container = QWidget()
+        interference_layout = QVBoxLayout(interference_container)
         self.interference_fig = Figure(figsize=(6, 6))
         self.interference_fig.patch.set_facecolor('#1e1e1e')
         self.interference_canvas = FigureCanvasQTAgg(self.interference_fig)
-        plot_layout.addWidget(self.interference_canvas)
+        interference_layout.addWidget(self.interference_canvas)
         
-        viz_layout.addLayout(plot_layout)
+        interference_toolbar = NavigationToolbar2QT(self.interference_canvas, interference_container)
+        interference_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
+        interference_layout.addWidget(interference_toolbar)
+        plots_row.addWidget(interference_container)
+        
+        viz_layout.addLayout(plots_row)
+        
+        # Second row - Array plot (full width)
+        array_row = QHBoxLayout()
+        array_row.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        
+        array_container = QWidget()
+        array_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)  # Allow horizontal expansion
+        array_layout = QVBoxLayout(array_container)
+        array_layout.setContentsMargins(0, 0, 0, 0)  # Remove container margins
+        
+        self.array_fig = Figure(figsize=(12, 6))  # Wider figure
+        self.array_fig.patch.set_facecolor('#1e1e1e')
+        self.array_canvas = FigureCanvasQTAgg(self.array_fig)
+        array_layout.addWidget(self.array_canvas)
+        
+        array_toolbar = NavigationToolbar2QT(self.array_canvas, array_container)
+        array_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
+        array_layout.addWidget(array_toolbar)
+
+        # Add checkbox for pattern shape
+        pattern_controls = QHBoxLayout()
+        self.full_pattern_checkbox = QCheckBox("Show Full Pattern")
+        self.full_pattern_checkbox.setStyleSheet("""
+            QCheckBox {
+                color: white;
+                spacing: 5px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox::indicator:unchecked {
+                background-color: #2d2d2d;
+                border: 2px solid #3a3a3a;
+                border-radius: 4px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2196f3;
+                border: 2px solid #1976d2;
+                border-radius: 4px;
+            }
+        """)
+        self.full_pattern_checkbox.toggled.connect(self.update_pattern)
+        pattern_controls.addWidget(self.full_pattern_checkbox)
+        pattern_layout.addLayout(pattern_controls)
+        
+        array_container.setLayout(array_layout)
+        array_row.addWidget(array_container, stretch=1)  # Add stretch factor
+        
+        viz_layout.addLayout(array_row)
         viz_widget.setLayout(viz_layout)
         self.layout.addWidget(viz_widget)
 
@@ -589,8 +560,10 @@ class BeamformingSimulator(QMainWindow):
         ax.set_xlabel('X Position (λ)', color='white')
         ax.set_ylabel('Y Position (λ)', color='white')
         
-        # Add colorbar with dB scale
-        cbar = self.interference_fig.colorbar(im, label='Relative Power (dB)')
+        # Add colorbar matched to plot height
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = self.interference_fig.colorbar(im, cax=cax, label='Relative Power (dB)')
         cbar.ax.yaxis.label.set_color('white')
         cbar.ax.tick_params(colors='white')
         
@@ -598,6 +571,8 @@ class BeamformingSimulator(QMainWindow):
         ax.grid(True, color='#404040', alpha=0.5, linestyle='--')
         ax.tick_params(colors='white')
         
+        # Ensure tight layout
+        self.interference_fig.tight_layout()
         self.interference_canvas.draw()
 
     def update_pattern_plot(self, theta, pattern):
@@ -620,23 +595,46 @@ class BeamformingSimulator(QMainWindow):
         ax.set_theta_direction(-1)       # Clockwise rotation
         
         # 2. Convert pattern to dB scale
-        pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))  # Convert to dB
-        pattern_db = np.clip(pattern_db, -40, 0)                   # Limit dynamic range
-        normalized_pattern = pattern_db + 40  # Shift to positive values for display
+        if self.full_pattern_checkbox.isChecked():
+            # Create full 360° pattern by mirroring
+            theta_full = np.concatenate([theta, theta + np.pi])
+            pattern_full = np.concatenate([pattern, pattern])
+            
+            pattern_db_full = 20 * np.log10(np.clip(pattern_full, 1e-10, None))
+            pattern_db_full = np.clip(pattern_db_full, -40, 0)
+            normalized_pattern = pattern_db_full + 40
+            
+            main_lobe_mask = pattern_db_full >= -3
+            side_lobe_mask = (pattern_db_full < -3) & (pattern_db_full >= -20)
+            
+            # Plot full pattern
+            ax.fill_between(theta_full, 0, normalized_pattern,
+                        where=main_lobe_mask, color='#2196f3', alpha=0.3)
+            ax.fill_between(theta_full, 0, normalized_pattern,
+                        where=side_lobe_mask, color='#ff9800', alpha=0.2)
+                        
+            # Calculate metrics using original pattern
+            pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
+            pattern_db = np.clip(pattern_db, -40, 0)
+        else:
+            # Original half-pattern code
+            pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
+            pattern_db = np.clip(pattern_db, -40, 0)
+            normalized_pattern = pattern_db + 40
+            
+            main_lobe_mask = pattern_db >= -3
+            side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
+            
+            
+            ax.fill_between(theta, 0, normalized_pattern,
+                        where=main_lobe_mask,
+                        color='#2196f3', alpha=0.3,
+                        label='Main Lobe (-3dB)')
+            ax.fill_between(theta, 0, normalized_pattern,
+                        where=side_lobe_mask,
+                        color='#ff9800', alpha=0.2,
+                        label='Side Lobes')
         
-        # 3. Identify main and side lobes
-        main_lobe_mask = pattern_db >= -3                    # Main beam >-3dB
-        side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)  # Side lobes -20dB to -3dB
-        
-        # 4. Plot lobes with different colors
-        ax.fill_between(theta, 0, normalized_pattern, 
-                    where=main_lobe_mask,
-                    color='#2196f3', alpha=0.3, 
-                    label='Main Lobe (-3dB)')
-        ax.fill_between(theta, 0, normalized_pattern, 
-                    where=side_lobe_mask,
-                    color='#ff9800', alpha=0.2, 
-                    label='Side Lobes')
 
         # 6. Calculate and display beam metrics
         self._show_beam_metrics(ax, theta, pattern_db)
@@ -739,6 +737,7 @@ class BeamformingSimulator(QMainWindow):
         ax.set_xticks(major_ticks)
         ax.set_yticks(major_ticks)
         
+            
         # Plot elements with better visibility
         scatter = ax.scatter(x, y, 
                             c='#2196f3',
@@ -862,7 +861,13 @@ class BeamformingSimulator(QMainWindow):
             spine.set_linewidth(1)
         
         # Update layout with more space
-        self.array_fig.tight_layout(pad=1.5)
+        ax.set_aspect('equal', adjustable='box')
+    
+        # Reduce vertical size while maintaining readability
+        plt.subplots_adjust(bottom=0.2, top=0.9)
+        
+        # Update layout with less vertical padding
+        self.array_fig.tight_layout(pad=0.5, h_pad=0.5, w_pad=0.5)
         self.array_canvas.draw()
         
     def save_scenario(self):
@@ -955,7 +960,7 @@ class BeamformingSimulator(QMainWindow):
                             "steering_angle": 0,
                             "curvature_factor": 1.5,
                             "operating_freqs": [0.5],
-                            "geometry_type": "Linear",
+                            "geometry_type": "Curved",
                             "x_pos": 0,
                             "y_pos": 0,
                             
@@ -1363,4 +1368,3 @@ if __name__ == '__main__':
     window = BeamformingSimulator()
     window.show()
     sys.exit(app.exec_())
-
