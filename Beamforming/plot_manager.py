@@ -31,12 +31,21 @@ class BasePlot(ABC):
         self.figure.clear()
     
 class PatternPlot(BasePlot):
-    def update(self, theta, pattern, steering_angles):
+    def update(self, theta, pattern, steering_angles, show_full_pattern=False):
         # Input validation
         if pattern is None or len(pattern) == 0 or theta is None:
             print("Invalid pattern or theta data")
             self.clear()
             return
+        
+
+        print(f'show_full_pattern: {show_full_pattern}')
+        if show_full_pattern:
+            # Create full 360° pattern
+            theta_full = np.linspace(0, 2*np.pi, len(theta)*2)
+            pattern_full = np.concatenate([pattern, np.flip(pattern)])
+            theta = theta_full
+            pattern = pattern_full
             
         print(f"Input stats:")
         print(f"- Pattern shape: {pattern.shape}")
@@ -55,54 +64,47 @@ class PatternPlot(BasePlot):
         # Setup plot
         self.figure.clear()
         ax = self.figure.add_subplot(111, projection='polar')
-        ax.set_theta_zero_location('N')
-        ax.set_theta_direction(-1)
+        #x.set_theta_zero_location('N')
+        #x.set_theta_direction(-1)
         
         # Define masks with better thresholds
-        main_lobe_mask = pattern_db >= -3
-        side_lobe_mask = (pattern_db < -3) & (pattern_db > -20)
+        main_lobe_threshold = -3  # -3dB point
+        side_lobe_threshold = -20
         
-        # Plot outline
-        ax.plot(theta, plot_pattern, 'w-', alpha=0.2, zorder=1)
-        
-        # Plot main lobe
-        ax.fill_between(theta, 0, plot_pattern,
-                    where=main_lobe_mask,
-                    color='#2196f3', alpha=0.4,
-                    label=f'Main Lobe',
-                    zorder=2)
-        
-        # Plot side lobes with check
-        side_lobe_points = pattern_db[side_lobe_mask]
-        if len(side_lobe_points) > 0:
-            print(f"Side lobes detected:")
-            print(f"- Count: {len(side_lobe_points)}")
-            print(f"- Range: [{np.min(side_lobe_points):.1f}, {np.max(side_lobe_points):.1f}]")
-            
+        main_lobe_mask = pattern_db >= main_lobe_threshold
+        side_lobe_mask = (pattern_db < main_lobe_threshold) & (pattern_db >= side_lobe_threshold)
+
+        # Base pattern plot
+        ax.plot(theta, plot_pattern, 'w-', alpha=0.3, zorder=1, linewidth=1)
+
+        # Fill patterns with proper order
+        if np.any(main_lobe_mask):
             ax.fill_between(theta, 0, plot_pattern,
-                        where=side_lobe_mask,
-                        color='#ff9800', alpha=0.3,
-                        label='Side Lobes',
-                        zorder=2)
-        
-        
-        # Plot steering angles
+                          where=main_lobe_mask,
+                          color='#2196f3', alpha=0.6,
+                          label='Main Lobe',
+                          zorder=3)
+
+        if np.any(side_lobe_mask):
+            ax.fill_between(theta, 0, plot_pattern,
+                          where=side_lobe_mask,
+                          color='#ff9800', alpha=0.4,
+                          label='Side Lobes',
+                          zorder=2)
+
+        # Steering angles
         if steering_angles:
             for angle in steering_angles:
                 if angle != 0:
                     angle_rad = np.radians(angle)
-                    # Steering line
                     ax.plot([angle_rad, angle_rad], [0, 40],
-                        color='#ff9800', linestyle='--',
-                        linewidth=2, alpha=0.7,
-                        label=f'Steering {angle}°')
-                    # Steering arc
-                    arc = np.linspace(angle_rad-np.pi/12, angle_rad+np.pi/12, 100)
-                    ax.plot(arc, np.ones_like(arc)*40,
-                        color='#ff9800', alpha=0.3)
-        
+                           color='#ff5722', linestyle='--',
+                           linewidth=1.5, alpha=0.7,
+                           label=f'Steering {angle}°',
+                           zorder=4)
+
         # Grid and styling
-        ax.grid(True, color='white', alpha=0.1, linestyle=':')
+        ax.grid(True, color='white', alpha=0.2, linestyle=':')
         
         # Angle labels
         angles = np.arange(0, 360, 15)
@@ -111,9 +113,12 @@ class PatternPlot(BasePlot):
                         fontsize=8, color=self.config.text_color)
         
         # Magnitude labels  
+        
+        
+        # Enhanced magnitude labels
         ax.set_yticks(np.linspace(0, 40, 5))
-        ax.set_yticklabels([f'{int(db)}dB' for db in np.linspace(-40, 0, 5)],
-                        color=self.config.text_color)
+        magnitude_labels = [f'{int(db):d}' for db in np.linspace(-40, 0, 5)]
+        ax.set_yticklabels(magnitude_labels, color=self.config.text_color)
         
         # Final styling
         ax.set_ylim(0, 45)
@@ -122,12 +127,15 @@ class PatternPlot(BasePlot):
                     pad=20, fontsize=14, fontweight='bold')
         
         # Legend
+        
+        
+        # Legend with better positioning
         ax.legend(loc='upper right',
-                bbox_to_anchor=(1.3, 1.1),
-                facecolor='#2d2d2d',
-                edgecolor='none',
-                labelcolor=self.config.text_color)
-                
+                 bbox_to_anchor=(1.2, 1.1),
+                 facecolor='#2d2d2d',
+                 edgecolor='none',
+                 labelcolor=self.config.text_color)
+        
         self.figure.tight_layout()
         
 
@@ -215,60 +223,53 @@ class ArrayGeometryPlot(BasePlot):
         x_positions = [p[0] for p in positions]
         y_positions = [p[1] for p in positions]
         
-        # Draw connection lines between elements
-        if len(positions) > 1:
-            ax.plot(x_positions, y_positions,
-                   color='#1976d2', 
-                   linestyle='--',
-                   alpha=0.5,
-                   zorder=1)
+        # Check dimensionality
+        unique_x = np.unique(x_positions)
+        unique_y = np.unique(y_positions)
+        is_linear = len(unique_x) == 1 or len(unique_y) == 1
         
-        # Plot elements with better styling
+        # Draw elements
         ax.scatter(x_positions, y_positions,
-                  c='#2196f3',
-                  marker='o', 
-                  s=200,
-                  edgecolor='white',
-                  linewidth=2,
-                  alpha=0.8, 
-                  zorder=3)
+                c='#2196f3', marker='o', s=200,
+                edgecolor='white', linewidth=2,
+                alpha=0.8, zorder=3)
         
-        # Add numbered labels
+        # Add element labels
         for i, (x, y) in enumerate(positions):
-            ax.annotate(f'{i + 1}',
-                       (x, y),
-                       color='white',
-                       ha='center',
-                       va='center',
-                       fontweight='bold',
-                       zorder=4)
-            
-            ax.annotate(f'({x:.1f}, {y:.1f})',
-                       (x, y),
-                       xytext=(0, -25),
-                       textcoords='offset points',
-                       ha='center',
-                       va='top',
-                       color=self.config.text_color,
-                       fontsize=8)
+            ax.annotate(f'{i + 1}', (x, y),
+                    color='white', ha='center', va='center',
+                    fontweight='bold', zorder=4)
+            ax.annotate(f'({x:.1f}, {y:.1f})', (x, y),
+                    xytext=(0, -25), textcoords='offset points',
+                    ha='center', va='top',
+                    color=self.config.text_color, fontsize=8)
         
-        # Add array boundary only if enough points
-        if len(positions) > 2:
-            try:
-                from scipy.spatial import ConvexHull
-                hull = ConvexHull(positions)
-                for simplex in hull.simplices:
-                    ax.plot([positions[simplex[0]][0], positions[simplex[1]][0]],
-                           [positions[simplex[0]][1], positions[simplex[1]][1]],
-                           'w--', alpha=0.3)
-            except Exception as e:
-                print(f"Could not draw convex hull: {str(e)}")
-                
+        # Draw boundary based on geometry
+        if len(positions) > 1:
+            if is_linear:
+                # Linear array - connect points directly
+                sorted_idx = np.argsort(x_positions) if len(unique_x) > 1 else np.argsort(y_positions)
+                ax.plot([x_positions[i] for i in sorted_idx],
+                    [y_positions[i] for i in sorted_idx],
+                    'w--', alpha=0.3, zorder=1)
+            else:
+                try:
+                    # Try convex hull with QJ option for non-linear arrays
+                    from scipy.spatial import ConvexHull
+                    hull = ConvexHull(positions, qhull_options='QJ')
+                    for simplex in hull.simplices:
+                        ax.plot([positions[simplex[0]][0], positions[simplex[1]][0]],
+                            [positions[simplex[0]][1], positions[simplex[1]][1]],
+                            'w--', alpha=0.3, zorder=1)
+                except Exception as e:
+                    print(f"Falling back to simple boundary: {str(e)}")
+                    # Fallback: Draw lines between consecutive points
+                    ax.plot(x_positions + [x_positions[0]],
+                        y_positions + [y_positions[0]],
+                        'w--', alpha=0.3, zorder=1)
+        
         # Style configuration
         self._setup_axis_style(ax)
         ax.set_aspect('equal')
-        
-        # Set proper axis limits
         self._set_axis_limits(ax, x_positions, y_positions)
-        
         self.figure.tight_layout()
