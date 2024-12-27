@@ -2,20 +2,11 @@ import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
-from matplotlib.figure import Figure
-import json
-from matplotlib import style
-import matplotlib as mpl
-from typing import List, Dict
-from dataclasses import dataclass
-from enum import Enum
-from beam_style import PLOT_STYLE, STYLE_SHEET
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from gui import ModernButton, ModernSlider
 from array_unit import ArrayUnit
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QMessageBox, QComboBox, QTableWidgetItem
+import logging
 
 class UnitControlPanel:
     def __init__(self, parent):
@@ -23,6 +14,8 @@ class UnitControlPanel:
         self.editing_mode = False
         self.current_unit_id = 0
         self.array_units = []
+        self.selected_unit_id = None
+
 
     def create_array_units_panel(self):
         # Create dock widget for unit management
@@ -234,11 +227,21 @@ class UnitControlPanel:
 
     def toggle_edit_mode(self):
         if self.editing_mode:
+
+            self.selected_unit_id = None  # Reset selected unit ID
+            # Save changes before exiting edit mode
+            current_item = self.units_list.currentItem()
+            if current_item:
+                self.update_unit_parameters()
+                self.update_unit_position()
+                
             # Exit edit mode
             self.editing_mode = False
             self.add_edit_button.setText("Add Unit")
-            self.units_list.clearSelection()
-            self.clear_unit_controls()
+            
+            # Only clear controls if no unit is selected
+            if not current_item:
+                self.clear_unit_controls()
         else:
             # Enter add mode
             self.editing_mode = True
@@ -247,6 +250,7 @@ class UnitControlPanel:
 
     def clear_unit_controls(self):
         """Reset all unit control values to defaults"""
+        self.selected_unit_id = None  # Reset selected unit ID
         self.unit_x.setValue(0)
         self.unit_y.setValue(0)
         self.unit_elements.setValue(16)
@@ -256,42 +260,61 @@ class UnitControlPanel:
         self.freq_table.setRowCount(0)
 
     def on_unit_selected(self, current, previous):
-        if current:
+        try:
+            # Clear previous state if no selection
+            if not current:
+                self.selected_unit_id = None
+                self.add_edit_button.setText("Add Unit")
+                self.editing_mode = False
+                return
+
+            # Get unit data
             unit_id = current.data(Qt.UserRole)
+            if unit_id is None:
+                raise ValueError("Invalid unit selection - no unit ID found")
+
             unit = next((u for u in self.array_units if u.id == unit_id), None)
-            if unit:
-                # Block signals temporarily
-                for control in [self.unit_x, self.unit_y, self.unit_elements, 
-                                self.unit_spacing, self.unit_steering, 
-                                self.unit_curvature, self.geometry_type]:
-                    control.blockSignals(True)
+            if not unit:
+                raise ValueError(f"Unit with ID {unit_id} not found")
+
+            self.selected_unit_id = unit_id
+
+            # Define controls list
+            controls = [
+                (self.unit_x, unit.x_pos),
+                (self.unit_y, unit.y_pos),
+                (self.unit_elements, unit.num_elements),
+                (self.unit_spacing, unit.element_spacing),
+                (self.unit_steering, unit.steering_angle),
+                (self.unit_curvature, unit.curvature_factor),
+                (self.geometry_type, unit.geometry_type)
+            ]
+
+            # Update controls with signal blocking
+            with QSignalBlocker(self.parent):
+                for control, value in controls:
+                    if isinstance(control, QComboBox):
+                        control.setCurrentText(str(value))
+                    else:
+                        control.setValue(float(value))
                 
-                # Update control values
-                self.unit_x.setValue(unit.x_pos)  
-                self.unit_y.setValue(unit.y_pos)
-                self.unit_elements.setValue(unit.num_elements)
-                self.unit_spacing.setValue(unit.element_spacing)
-                self.unit_steering.setValue(unit.steering_angle)
-                self.unit_curvature.setValue(unit.curvature_factor)
-                self.geometry_type.setCurrentText(unit.geometry_type)
                 self.curvature_widget.setVisible(unit.geometry_type == "Curved")
-                
-                # Re-enable signals
-                for control in [self.unit_x, self.unit_y, self.unit_elements,
-                                self.unit_spacing, self.unit_steering, 
-                                self.unit_curvature, self.geometry_type]:
-                    control.blockSignals(False)
-                    
-                # Update frequency table
-                self.freq_table.setRowCount(0)
-                for freq in unit.operating_freqs:
-                    row = self.freq_table.rowCount()
-                    self.freq_table.insertRow(row)
-                    self.freq_table.setItem(row, 0, QTableWidgetItem(f"{freq}"))
-                    self.freq_table.setItem(row, 1, QTableWidgetItem("MHz"))
-                
-                self.add_edit_button.setText("Exit Edit Mode")
-                self.editing_mode = True
+
+            # Update frequency table
+            self.freq_table.setRowCount(0)
+            for row, freq in enumerate(unit.operating_freqs):
+                self.freq_table.insertRow(row)
+                self.freq_table.setItem(row, 0, QTableWidgetItem(str(freq)))
+                self.freq_table.setItem(row, 1, QTableWidgetItem("MHz"))
+
+            # Update edit mode state
+            self.add_edit_button.setText("Exit Edit Mode")
+            self.editing_mode = True
+
+        except Exception as e:
+            logging.error(f"Error in unit selection: {str(e)}")
+            QMessageBox.critical(self.parent, "Error", 
+                            f"Failed to select unit: {str(e)}")
 
     def has_active_units(self):
         return any(u.enabled for u in self.array_units)
@@ -301,40 +324,51 @@ class UnitControlPanel:
     
     def update_unit_parameters(self):
         """Update selected unit parameters in real-time with frequency validation"""
-        current_item = self.units_list.currentItem()
-        if current_item and self.array_units and self.editing_mode:
-            unit_id = current_item.data(Qt.UserRole)
-            unit = next((u for u in self.array_units if u.id == unit_id), None)
-            if unit:
-                # Get frequencies from table
-                frequencies = []
-                for i in range(self.freq_table.rowCount()):
-                    try:
-                        freq = float(self.freq_table.item(i, 0).text())
-                        frequencies.append(freq)
-                    except (ValueError, AttributeError):
-                        continue
+        try:
+            # Check if we have a valid selection
+            if self.selected_unit_id is None:
+                return
                 
-                # Ensure at least one frequency exists
-                if not frequencies:
-                    frequencies = [self.freq_input.value()]
-                    self.add_frequency()  # Add default frequency to table
-                
-                # Update unit parameters
-                unit.num_elements = self.unit_elements.value()
-                unit.element_spacing = self.unit_spacing.value()
-                unit.steering_angle = self.unit_steering.value()
-                unit.geometry_type = self.geometry_type.currentText()
-                unit.curvature_factor = self.unit_curvature.value()
-                unit.operating_freqs = frequencies
-                
-                self.parent.update_pattern()
+            # Find the correct unit by ID
+            unit = next((u for u in self.array_units if u.id == self.selected_unit_id), None)
+            if not unit:
+                logging.error(f"Unit with ID {self.selected_unit_id} not found")
+                return
+
+            # Collect frequencies from table
+            frequencies = []
+            for i in range(self.freq_table.rowCount()):
+                try:
+                    freq = float(self.freq_table.item(i, 0).text())
+                    frequencies.append(freq)
+                except (ValueError, AttributeError):
+                    continue
+
+            # Ensure at least one frequency exists
+            if not frequencies:
+                frequencies = [self.freq_input.value()]
+                self.add_frequency()
+
+            # Update the specific unit's parameters
+            unit.num_elements = int(self.unit_elements.value())
+            unit.element_spacing = float(self.unit_spacing.value())
+            unit.steering_angle = float(self.unit_steering.value())
+            unit.geometry_type = self.geometry_type.currentText()
+            unit.curvature_factor = float(self.unit_curvature.value())
+            unit.operating_freqs = frequencies
+
+            # Force UI update
+            self.parent.update_pattern()
+            
+        except Exception as e:
+            logging.error(f"Error updating unit parameters: {str(e)}")
+            QMessageBox.critical(self.parent, "Error", 
+                            f"Failed to update unit parameters: {str(e)}")
+
 
     def update_unit_position(self):
-        current_item = self.units_list.currentItem()
-        if current_item and self.array_units:
-            unit_id = current_item.data(Qt.UserRole)
-            unit = next((u for u in self.array_units if u.id == unit_id), None)
+        if self.selected_unit_id is not None:
+            unit = next((u for u in self.array_units if u.id == self.selected_unit_id), None)
             if unit:
                 unit.x_pos = self.unit_x.value()
                 unit.y_pos = self.unit_y.value()
@@ -356,41 +390,56 @@ class UnitControlPanel:
             self.units_list.takeItem(self.units_list.row(current_item))
 
     def add_array_unit(self):
-        # Get current frequencies from table
-        frequencies = []
-        for row in range(self.freq_table.rowCount()):
-            freq_item = self.freq_table.item(row, 0)
-            if freq_item:
-                frequencies.append(float(freq_item.text()))
+        try:
+            # Get current frequencies
+            frequencies = []
+            for row in range(self.freq_table.rowCount()):
+                freq_item = self.freq_table.item(row, 0)
+                if freq_item:
+                    frequencies.append(float(freq_item.text()))
+                    
+            if not frequencies:
+                frequencies = [self.freq_input.value()]
                 
-        if not frequencies:  # If no frequencies, use default
-            frequencies = [self.freq_input.value()]
-            
-        # Create dialog for unit name
-        name, ok = QInputDialog.getText(self.parent, "New Unit", "Enter unit name:")
-        if ok and name:
-            unit = ArrayUnit(
-                id=self.current_unit_id,
-                name=name,
-                x_pos=self.unit_x.value(),
-                y_pos=self.unit_y.value(),
-                num_elements=self.unit_elements.value(),
-                element_spacing=self.unit_spacing.value(),
-                steering_angle=self.unit_steering.value(),
-                geometry_type=self.geometry_type.currentText(),
-                curvature_factor=self.unit_curvature.value(),
-                operating_freqs=frequencies,
-                enabled=True
-            )
-            self.array_units.append(unit)
-            self.current_unit_id += 1
-            
-            self.editing_mode = False
-            self.add_edit_button.setText("Add Unit")
-            self.clear_unit_controls()
-            
-            self.update_units_list()
-            self.parent.update_pattern()
+            # Get unit name
+            name, ok = QInputDialog.getText(self.parent, "New Unit", "Enter unit name:")
+            if ok and name:
+                # Create new unit
+                unit = ArrayUnit(
+                    id=self.current_unit_id,
+                    name=name,
+                    x_pos=self.unit_x.value(),
+                    y_pos=self.unit_y.value(),
+                    num_elements=self.unit_elements.value(),
+                    element_spacing=self.unit_spacing.value(),
+                    steering_angle=self.unit_steering.value(),
+                    geometry_type=self.geometry_type.currentText(),
+                    curvature_factor=self.unit_curvature.value(),
+                    operating_freqs=frequencies,
+                    enabled=True
+                )
+                
+                # Add unit and update ID
+                self.array_units.append(unit)
+                self.current_unit_id += 1
+                
+                # Update UI
+                self.update_units_list()
+                
+                # Select the newly added unit
+                last_index = self.units_list.count() - 1
+                self.units_list.setCurrentRow(last_index)
+                
+                # Update editing mode
+                self.editing_mode = True
+                self.add_edit_button.setText("Exit Edit Mode")
+                
+                # Update pattern
+                self.parent.update_pattern()
+                
+        except Exception as e:
+            logging.error(f"Error adding unit: {str(e)}")
+            QMessageBox.critical(self.parent, "Error", f"Failed to add unit: {str(e)}")
 
     def update_units_list(self):
         self.units_list.clear()
