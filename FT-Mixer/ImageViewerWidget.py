@@ -18,8 +18,10 @@ from mixer_functions import mix_magnitude_phase, mix_real_imaginary
 from control_functions import draw_rectangle, clear_rectangle
 from ImageDisplay import ImageDisplay
 import logging
-from ResizableRect import ResizableRect
 from MixerUI import ModernWindow
+
+
+
 
 logging.basicConfig(
     level=logging.DEBUG,  # Set the logging level
@@ -216,8 +218,10 @@ class ImageViewerWidget(ModernWindow):
             if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
                 return parent
             parent = parent.parentWidget()
-        return None
+        return parent
     
+
+
     def _on_slider_changed(self):
         # Find the parent ModernWindow instance
         parent = self
@@ -227,6 +231,8 @@ class ImageViewerWidget(ModernWindow):
             # Schedule the real-time mix instead of calling it directly
             parent.schedule_real_time_mix()
     
+
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             if self.originalImageLabel.underMouse():
@@ -235,7 +241,7 @@ class ImageViewerWidget(ModernWindow):
                 # No need to check for edges when adjusting brightness, just drag to adjust
             elif self.ftComponentLabel.underMouse():
                 pass
-
+     
 
     def mouseMoveEvent(self, event):
         if self.dragging:
@@ -326,7 +332,7 @@ class ImageViewerWidget(ModernWindow):
             self.originalImageLabel.showLoadingSpinner()
             # Load image
             parent = self.find_parent_window()
-            print("My Parent is     ", parent)
+            print("My Parent is ", parent)
             self.image, self.imageData = loadImage(self, parent)
             self.qImage = convert_data_to_image(self.imageData)
             if self.qImage is None or self.imageData is None:
@@ -432,3 +438,4 @@ class ImageViewerWidget(ModernWindow):
             self.originalImageLabel.setPixmap(self.image.scaled(
                 scaled_size.toSize(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
 
+  

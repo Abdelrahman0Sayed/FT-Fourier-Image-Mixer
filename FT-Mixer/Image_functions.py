@@ -110,10 +110,9 @@ def displayFrequencyComponent(self, PlottedComponent):
         
     if PlottedComponent == "FT Magnitude":
         # Take the Magnitude as log scale
-        
-        
-        ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-        #ftMagnitudes = self.ftMagnitudes
+
+        #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+        ftMagnitudes = self.ftMagnitudes
         ftLog = 15 * np.log(ftMagnitudes + 1e-10)
         ftNormalized = (255 * (ftLog / ftLog.max())).astype(np.uint8)
         
@@ -194,8 +193,10 @@ def displayFrequencyComponent(self, PlottedComponent):
         self.imaginaryImage = pixmap
         self.ftComponentLabel.setPixmap(pixmap)
     
+    
     parent = self.find_parent_window()
     parent.real_time_mix()
+    parent.draw_rectangle( parent.viewers ,parent.region)
 
 
 

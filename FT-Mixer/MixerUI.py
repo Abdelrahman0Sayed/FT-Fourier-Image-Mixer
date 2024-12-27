@@ -15,10 +15,8 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5 import QtCore, QtGui, QtWidgets
 from mixer_functions import mix_magnitude_phase, mix_real_imaginary
-from control_functions import draw_rectangle, clear_rectangle
 from ImageDisplay import ImageDisplay
 import logging
-from ResizableRect import ResizableRect
 
 logging.basicConfig(
     level=logging.DEBUG,  # Set the logging level
@@ -62,7 +60,11 @@ class ModernWindow(QMainWindow):
         self.imageWidget = imageWidget
         self.viewers = []
         self.rectSize = 0
-    
+        self.topLeft = QPoint(75, 75)
+        self.topRight = QPoint(225, 75)
+        self.bottomLeft = QPoint(75, 225)
+        self.bottomRight = QPoint(225, 225)    
+        self.threshold = QPoint(3, 3)
 
         self.outputViewers = []
 
@@ -92,7 +94,7 @@ class ModernWindow(QMainWindow):
             
         try:
             self.is_mixing = True
-            self.mix_button.setEnabled(False)
+            #self.mix_button.setEnabled(False)
             # self.mix_progress.setValue(0)
             # self.mix_progress.show()
             QApplication.processEvents()  # Force UI update
@@ -108,59 +110,6 @@ class ModernWindow(QMainWindow):
         if not self.is_mixing:
             self.mix_timer.stop()
             self.mix_timer.start(600)  # 200ms debounce
-
-
-
-
-    def real_time_mix(self):
-        try:
-            output_index = self.output_selector.currentIndex()
-            output_viewer = self.outputViewers[output_index]
-            if not output_viewer or not output_viewer.originalImageLabel:
-                return
-
-            self.mix_progress.setValue(10)
-
-            # Collect components
-            components = []
-            for i, viewer in enumerate(self.viewers):
-                if viewer and hasattr(viewer, 'fftComponents') and viewer.fftComponents is not None:
-                    # ... existing component collection code ...
-                    #self.mix_progress.setValue(20 + (i * 15))
-                    pass
-            if not components:
-                return
-            self.mix_progress.setValue(20)
-            # Perform mixing
-            mix_type = self.mix_type.currentText()
-            if mix_type == "Magnitude/Phase":
-                result = mix_magnitude_phase(self, components)
-            else:
-                result = mix_real_imaginary(self, components)
-
-            self.mix_progress.setValue(40)
-            # Process result
-            
-            mixed_image = np.fft.ifft2(result)
-            mixed_image = np.abs(mixed_image)
-            mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
-            mixed_image = mixed_image.astype(np.uint8)
-            
-            self.mix_progress.setValue(70)
-
-            # Update display
-            qImage = convet_mixed_to_qImage(mixed_image)
-            if qImage and output_viewer and output_viewer.originalImageLabel:
-                pixmap = QPixmap.fromImage(qImage)
-                output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.IgnoreAspectRatio))
-
-            self.mix_progress.setValue(100)
-
-        except Exception as e:
-            print(f"Error during real-time mixing: {str(e)}")
-            if hasattr(self, 'show_error'):
-                self.show_error(f"Mixing failed: {str(e)}")
-
 
 
     def _setup_theme(self):
@@ -254,33 +203,24 @@ class ModernWindow(QMainWindow):
     def _setup_connection(self):
         print("Setting up connections")
         # Use direct method connection instead of lambda
-        self.mix_button.clicked.connect(self.on_mix_button_clicked)
+        #self.mix_button.clicked.connect(self.on_mix_button_clicked)
 
     def _finish_mixing(self):
         self.is_mixing = False
-        self.mix_button.setEnabled(True)
-        self.mix_progress.hide()
+        #self.mix_button.setEnabled(True)
+        #self.mix_progress.hide()
 
     def on_mix_button_clicked(self):
         try:
             # Show progress bar at start
-            #self.mix_progress.setValue(0)
-            #self.mix_progress.show()
-            self.mix_button.setEnabled(False)
+            print("We Should Mix Now")
             QApplication.processEvents()
             
-            # Initial progress
-            #self.mix_progress.setValue(10)
             QApplication.processEvents()
             logging.info("Mixing on progress.")
             # Store strong reference to output viewer
-            output_index = self.output_selector.currentIndex()
-            output_viewer = self.outputViewers[output_index]
-            if not output_viewer or not output_viewer.originalImageLabel:
-                self.show_error("Invalid output viewer")
-                return
-            self.mix_button.setEnabled(False)
-            #self.mix_progress.show()
+
+
             
             # Collect and validate components
             components = []
@@ -292,23 +232,28 @@ class ModernWindow(QMainWindow):
                     else:
                         if self.inner_region.isChecked():
                             data_percentage = self.rectSize / 300
-
+                            print("Inner region mixing...")
                             # Create zero array same size as shifted input
                             ftComponents = np.zeros_like(viewer.fftComponents)
                             # Calculate region bounds (now centered at image center)
-                            center_x = viewer.fftComponents.shape[0] // 2
-                            center_y = viewer.fftComponents.shape[1] // 2    
-                            region_size = int(300 * data_percentage)
+                            # Get the position of the top left corner of the rectangle and normalize it to the size of the image to know the start index 
+                            start_x = (self.topLeft.x() / 300) * viewer.fftComponents.shape[0]
+                            start_y = (self.topLeft.y() / 300) * viewer.fftComponents.shape[1]
+                            # Get the position of the bottom right corner of the rectangle and normalize it to the size of the image to know the end index
+                            end_x = (self.bottomRight.x() / 300) * viewer.fftComponents.shape[0]
+                            end_y = (self.bottomRight.y() / 300) * viewer.fftComponents.shape[1]
 
-                            
+                            print(f"X starting from {start_x} and ends on {end_x}")
+                            print(f"Y starting from {start_y} and ends on {end_y}")
+
 
                             # Copy only inner region from shifted data, rest remains zero
                             ftComponents[
-                                center_x - region_size:center_x + region_size,
-                                center_y - region_size:center_y + region_size
+                                start_x:end_x,
+                                start_y:end_y
                             ] = viewer.fftComponents[
-                                center_x - region_size:center_x + region_size,
-                                center_y - region_size:center_y + region_size
+                                start_x:end_x,
+                                start_y:end_y
                             ]
 
                         else:
@@ -344,7 +289,6 @@ class ModernWindow(QMainWindow):
 
                     
             # Update progress after components collected
-            #self.mix_progress.setValue(60)
             QApplication.processEvents()
             if not components:
                 self.show_error("Please load images before mixing!")
@@ -358,7 +302,6 @@ class ModernWindow(QMainWindow):
             else:
                 result =  mix_real_imaginary(self, components)
             
-            #self.mix_progress.setValue(80)
             QApplication.processEvents()
             # Cause of the data doesn't apply Shifting of zero by default
             #mixed_image = np.fft.ifftshift(result)
@@ -367,16 +310,18 @@ class ModernWindow(QMainWindow):
             mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
             mixed_image = mixed_image.astype(np.uint8)
 
-            #self.mix_progress.setValue(90)
             QApplication.processEvents()
             qImage = convet_mixed_to_qImage(mixed_image)
             if qImage is None:
                 print("Image is None")
+            
+            output_index = self.output_selector.currentIndex()
+            output_viewer = self.outputViewers[output_index]
 
+            
             if output_viewer and output_viewer.originalImageLabel:
                 pixmap = QPixmap.fromImage(qImage)
                 output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300 ,Qt.IgnoreAspectRatio))
-            self.mix_progress.setValue(100)
             QApplication.processEvents()
 
         except Exception as e:
@@ -389,41 +334,57 @@ class ModernWindow(QMainWindow):
     def real_time_mix(self):
         try:
             # Show progress bar at start
-            #self.mix_progress.setValue(0)
-            #self.mix_progress.show()
             QApplication.processEvents()
 
-            output_index = self.output_selector.currentIndex()
-            output_viewer = self.outputViewers[output_index]
-            if not output_viewer or not output_viewer.originalImageLabel:
-                return
-
+            print("Real Time Mixing")
+            print(f"Self: {self}")
             # Collect components
             components = []
+            print(f"Viewers: {self.viewers}")
             for i, viewer in enumerate(self.viewers):
+                print("I Have viewers")
                 if viewer and hasattr(viewer, 'fftComponents') and viewer.fftComponents is not None:
+                    print("They have fftComponents")
                     ftComponents = []
-                    if self.rectSize <= 5:
-                        ftComponents = viewer.fftComponents
-                    else:
+                    if True:
                         if self.inner_region.isChecked():
+                            print("Mixing Ineer Data")
                             data_percentage = self.rectSize / 300
+
+                            # Create zero array same size as shifted input
                             ftComponents = np.zeros_like(viewer.fftComponents)
+                            # Calculate region bounds (now centered at image center)
+                            # Get the position of the top left corner of the rectangle and normalize it to the size of the image to know the start index 
+                            
+                            print(self.topLeft)
+                            print(self.topRight)
+                            print(self.bottomLeft)
+                            print(self.bottomRight)
+
+
                             center_x = viewer.fftComponents.shape[0] // 2
-                            center_y = viewer.fftComponents.shape[1] // 2    
+                            center_y = viewer.fftComponents.shape[1] // 2 
+                            print("Length of x Data")
+                            start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
+                            end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
 
-                            # Calculate region size and ensure it is an integer
-                            region_size_row = int(data_percentage * viewer.fftComponents.shape[0])
-                            region_size_col = int(data_percentage * viewer.fftComponents.shape[1])
+                            start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
+                            end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
+                            
 
-                            # Define the slice indices explicitly as integers
-                            start_x = center_x - region_size_row // 2
-                            end_x = center_x + region_size_row // 2
-                            start_y = center_y - region_size_col // 2
-                            end_y = center_y + region_size_col // 2
 
-                            # Use the computed indices for slicing
-                            ftComponents[start_x:end_x, start_y:end_y] = viewer.fftComponents[start_x:end_x, start_y:end_y]
+                            print(f"X starting from {start_x} and ends on {end_x}")
+                            print(f"Y starting from {start_y} and ends on {end_y}")
+
+
+                            # Copy only inner region from shifted data, rest remains zero
+                            ftComponents[
+                                max(0, center_x - start_x) : min(center_x + end_x , viewer.fftComponents.shape[0]),
+                                max(0,center_y - start_y) : min(center_y + end_y , viewer.fftComponents.shape[1]) 
+                            ] = viewer.fftComponents[
+                                max(0, center_x - start_x) : min(center_x + end_x , viewer.fftComponents.shape[0]),
+                                max(0,center_y - start_y) : min(center_y + end_y , viewer.fftComponents.shape[1]) 
+                            ]
 
                         else:
                             data_percentage = self.rectSize / 300  # Calculate the data percentage
@@ -435,13 +396,18 @@ class ModernWindow(QMainWindow):
                             region_size_col = int(data_percentage * viewer.fftComponents.shape[1])
 
                             # Define the slice indices explicitly as integers
-                            start_x = center_x - region_size_row // 2
-                            end_x = center_x + region_size_row // 2
-                            start_y = center_y - region_size_col // 2
-                            end_y = center_y + region_size_col // 2
+                            center_x = viewer.fftComponents.shape[0] // 2
+                            center_y = viewer.fftComponents.shape[1] // 2 
+                            print("Length of x Data")
+                            start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
+                            end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
+
+                            start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
+                            end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
 
                             # Zero out the desired region using slicing
-                            ftComponents[start_x:end_x, start_y:end_y] = 0
+                            ftComponents[center_x - start_x: center_x + end_x, 
+                                         center_y - start_y: center_y + end_y] = 0
 
                     weight = viewer.weight1_slider.value() / 100.0
 
@@ -456,7 +422,6 @@ class ModernWindow(QMainWindow):
             if not components:
                 return
 
-            #self.mix_progress.setValue(60)
             QApplication.processEvents()
 
             # Get mixing type and perform mix
@@ -476,6 +441,10 @@ class ModernWindow(QMainWindow):
             mixed_image = mixed_image.astype(np.uint8)
 
             #self.mix_progress.setValue(90)
+            output_index = self.output_selector.currentIndex()
+            output_viewer = self.outputViewers[output_index]
+            if not output_viewer or not output_viewer.originalImageLabel:
+                return
             QApplication.processEvents()
 
             # Update display
@@ -495,6 +464,10 @@ class ModernWindow(QMainWindow):
             # Don't hide immediately to show completion
             QTimer.singleShot(500, lambda: self._finish_mixing())
             
+
+
+
+
     def buildUI(self):
         # Main container
 
@@ -595,18 +568,17 @@ class ModernWindow(QMainWindow):
         self.outer_region.clicked.connect(lambda: self.changeRegion("Outer"))
         
         self.region = "Inner"
-        self.region_size = QSlider(Qt.Horizontal)
-        self.region_size.setRange(1, 300)
-        self.region_size.setValue(0)
-        self.region_size.setSingleStep(5)  # Set the step size to 5
-        self.region_size.valueChanged.connect(lambda: draw_rectangle(self, self.viewers, self.region_size.value() , self.region))
-        self.region_size.setToolTip("Adjust the size of selected region")
-        self.deselect_btn = QPushButton("Clear Selection")
-        self.deselect_btn.clicked.connect(lambda: clear_rectangle(self, self.viewers))
+        # Lets Add a Check Box If user want to select the region of the image
+        self.region_size = QCheckBox("ROF")
+        self.region_size.setChecked(False)
+
+        self.reset_btn = QPushButton("Reset ROF Dimensions")
+        self.reset_btn.clicked.connect(lambda: self.reset_rectangle(self.viewers))
+        self.region_size.toggled.connect(lambda: self.clear_rectangle(self.viewers))
         region_controls_layout.addWidget(self.inner_region)
         region_controls_layout.addWidget(self.outer_region)
         region_controls_layout.addWidget(self.region_size)
-        region_controls_layout.addWidget(self.deselect_btn)
+        region_controls_layout.addWidget(self.reset_btn)
         region_layout.addWidget(region_controls)
         # Add to right panel
         right_layout.addWidget(output_group)
@@ -636,7 +608,6 @@ class ModernWindow(QMainWindow):
         mixing_type_layout.addWidget(self.mix_type)
         mixing_type_layout.addLayout(output_selector_layout)
         right_layout.addWidget(mixing_type_group)
-        self.region_size.valueChanged.connect(self._on_region_size_changed)
         # Mixing controls
         # Add mix button and progress bar
         self.mix_button = QPushButton("Start Mix")
@@ -696,8 +667,158 @@ class ModernWindow(QMainWindow):
         logging.info("Exiting Application.")
         self.close()
 
+    def reset_rectangle(self, viewers):
+        self.topLeft = QPoint(75, 75)
+        self.topRight = QPoint(225, 75)
+        self.bottomLeft = QPoint(75, 225)
+        self.bottomRight = QPoint(225, 225)
+        self.threshold = QPoint(3, 3)
+        
+        for viewer in viewers:
+            viewer.topLeft = QPoint(75, 75)
+            viewer.topRight = QPoint(225, 75)
+            viewer.bottomLeft = QPoint(75, 225)
+            viewer.bottomRight = QPoint(225, 225)
+            viewer.threshold = QPoint(3, 3)
+        self.region_size.setChecked(True)
+        self.draw_rectangle(viewers, self.region)
+        
+    def draw_rectangle(self, viewers, region):
+        if region == "Inner":
+            for viewer in viewers:
+                if viewer.imageData is not None:
+                    pixmapType = viewer.component_selector.currentText()
+                    if pixmapType == "FT Magnitude":
+                        original_pixmap = viewer.magnitudeImage 
+
+                    elif pixmapType == "FT Phase":
+                        original_pixmap = viewer.imageWidget.phaseImage
+
+                    elif pixmapType == "FT Real":
+                        original_pixmap = viewer.imageWidget.realImage
+
+                    elif pixmapType == "FT Imaginary":
+                        original_pixmap = viewer.imageWidget.imaginaryImage
+
+                    if original_pixmap is None:
+                        continue 
+                    new_pixmap = original_pixmap.copy() 
+
+                    painter = QPainter(new_pixmap)
+
+                    painter.setOpacity(0.2) 
+                    painter.setBrush(QColor(0, 0, 0, 128))  # Black with alpha 128 (out of 255)
+
+                    rectWidth = self.topRight.x() - self.topLeft.x()
+                    rectHeight = self.bottomLeft.y() - self.topLeft.y()
+                    inner_rect = QRect(self.topLeft.x(), self.topLeft.y(), rectWidth, rectHeight)
+                    painter.drawRect(inner_rect)
+
+                    # Draw the outer region with higher opacity
+                    painter.setOpacity(0.8) 
+                    painter.setBrush(QColor(0, 0, 0, 230))  # Black with alpha 230 (out of 255)
+
+                    # Create a path for the outer region with a hole in the middle
+                    path = QPainterPath()
+                    path.addRect(QRectF(new_pixmap.rect()))  # Convert QRect to QRectF
+                    path.addRect(QRectF(inner_rect))  # Convert QRect to QRectF
+                    painter.setClipPath(path)
+
+                    painter.drawRect(new_pixmap.rect())
+                    
+                    self.drawEdges(painter)
+
+                    painter.end()
+
+                    viewer.ftComponentLabel.setPixmap(new_pixmap)
+                    parent = viewer.find_parent_window()
+
+        else:
+            # Draw the brush inside the rectangle
+            for viewer in viewers:
+                if viewer.imageData is not None:
+                    pixmapType = viewer.component_selector.currentText()
+                    if pixmapType == "FT Magnitude":
+                        original_pixmap = viewer.magnitudeImage 
+
+                    elif pixmapType == "FT Phase":
+                        original_pixmap = viewer.imageWidget.phaseImage
+
+                    elif pixmapType == "FT Real":
+                        original_pixmap = viewer.imageWidget.realImage
+
+                    elif pixmapType == "FT Imaginary":
+                        original_pixmap = viewer.imageWidget.imaginaryImage
+
+                    
+                    if original_pixmap is None:
+                        continue 
+                    new_pixmap = original_pixmap.copy() 
+                    
+                    painter = QPainter(new_pixmap)
+                    painter.setOpacity(1) 
+                    painter.setBrush(QColor(0, 0, 0, 200))  # Red with alpha 128 (out of 255)
+
+
+                    rectWidth = self.topRight.x() - self.topLeft.x()
+                    rectHeight = self.bottomLeft.y() - self.topLeft.y()
+                    painter.drawRect(QRect(self.topLeft.x(), self.topLeft.y(), rectWidth, rectHeight))
+
+                    self.drawEdges(painter)
+                    painter.end()
+                    
+                    viewer.ftComponentLabel.setPixmap(new_pixmap)
+                    parent = viewer.find_parent_window()
+        parent.schedule_real_time_mix()
+        
+
+    
+    def drawEdges(self, painter):
+        # let's draw small solid rectangles at the corners of the rectangle
+        painter.setOpacity(1)
+
+        # Edges
+        topLeft = QPoint(self.topLeft.x() - 5, self.topLeft.y() - 5)
+        topRight = QPoint(self.topRight.x() - 5, self.topRight.y() - 5)
+        bottomLeft = QPoint(self.bottomLeft.x() - 5, self.bottomLeft.y() - 5)
+        bottomRight = QPoint(self.bottomRight.x() - 5, self.bottomRight.y() - 5)
+
+
+        painter.setBrush(QColor(0, 0, 255, 255))  # Black with alpha 255 (out of 255)
+        painter.drawRect(QRect(topLeft.x(), topLeft.y(), 10, 10))
+        painter.drawRect(QRect(topRight.x(), topRight.y(), 10, 10))
+        painter.drawRect(QRect(bottomLeft.x(), bottomLeft.y(), 10, 10))
+        painter.drawRect(QRect(bottomRight.x(), bottomRight.y(), 10, 10))
+        
+
+
+
+    def clear_rectangle(self, viewers):
+        if not self.region_size.isChecked():
+            for viewer in viewers:
+                pixmapType = viewer.component_selector.currentText()
+                if pixmapType == "FT Magnitude":
+                    original_pixmap = viewer.magnitudeImage 
+
+                elif pixmapType == "FT Phase":
+                    original_pixmap = viewer.imageWidget.phaseImage
+
+                elif pixmapType == "FT Real":
+                    original_pixmap = viewer.imageWidget.realImage
+
+                elif pixmapType == "FT Imaginary":
+                    original_pixmap = viewer.imageWidget.imaginaryImage
+
+                if original_pixmap is None:
+                    continue 
+
+                new_pixmap = original_pixmap.copy() 
+                viewer.ftComponentLabel.setPixmap(new_pixmap)
+        else:
+            self.draw_rectangle(viewers, self.region)
+
+
     def _on_region_size_changed(self):
-        draw_rectangle(self, self.viewers, self.region_size.value(), self.region)
         parent = self
         while parent and not isinstance(parent, ModernWindow):
             parent = parent.parent()
@@ -714,7 +835,7 @@ class ModernWindow(QMainWindow):
         else:
             self.inner_region.setChecked(False)
             self.outer_region.setChecked(True)
-        draw_rectangle(self, self.viewers , self.region_size.value() ,self.region)
+        self.draw_rectangle(self.viewers  ,self.region)
         
 
     def update_mixing_mode(self, index):
@@ -886,6 +1007,7 @@ class ImageViewerWidget(ModernWindow):
 
 
 
+
         self.build_ui(title)
         self._setup_animations()
 
@@ -1007,12 +1129,13 @@ class ImageViewerWidget(ModernWindow):
         # Get the top-level window
         parent = self.parentWidget()
         while parent:
-            print("My Parent is", parent)
             if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
                 return parent
             parent = parent.parentWidget()
         return None
     
+
+
     def _on_slider_changed(self):
         # Find the parent ModernWindow instance
         parent = self
@@ -1022,6 +1145,8 @@ class ImageViewerWidget(ModernWindow):
             # Schedule the real-time mix instead of calling it directly
             parent.schedule_real_time_mix()
     
+
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             if self.originalImageLabel.underMouse():
@@ -1029,8 +1154,38 @@ class ImageViewerWidget(ModernWindow):
                 self.last_pos = event.pos()
                 # No need to check for edges when adjusting brightness, just drag to adjust
             elif self.ftComponentLabel.underMouse():
-                pass
+                # Now we need to get the position of the mouse relative to the image that he is clicked on , if the position at one of the edges of the rectangle, we need to resize the rectangle
+                print("You trying to adjust the rectangle")
+                self.dragging = True
+                # I need to current Position depending the self.ftComponentLabel not the ImageViewerWidget
 
+
+                global_pos = event.globalPos()
+                self.last_pos = self.ftComponentLabel.mapFromGlobal(global_pos)
+
+                print("The Last Position is: ", self.last_pos)
+                self.resizing_edge = None
+
+                
+                # I want to check the position of the mouse relative to the edges of the rectangle with a threshold of 3 pixels
+                margin = 10
+                if  (self.last_pos.x() - self.topLeft.x() ) <= margin and ( self.last_pos.y() - self.topLeft.y() ) <= margin:
+                    self.resizing_edge = "topLeft"
+                
+                elif (self.last_pos.x() - self.topRight.x()) <= margin and (self.last_pos.y() - self.topRight.y()) <= margin:
+                    self.resizing_edge = "topRight"
+                
+                elif (self.last_pos.x() - self.bottomLeft.x()) <= margin and (self.last_pos.y() - self.bottomLeft.y()) <= margin:
+                    self.resizing_edge = "bottomLeft"
+                
+                elif (self.last_pos.x() - self.bottomRight.x()) <= margin and (self.last_pos.y() - self.bottomRight.y()) <= margin:
+                    self.resizing_edge = "bottomRight"
+                
+                print("The Resizing Edge is: ", self.resizing_edge)
+                self.resizeRectangle()
+                
+                
+     
 
     def mouseMoveEvent(self, event):
         if self.dragging:
@@ -1051,9 +1206,13 @@ class ImageViewerWidget(ModernWindow):
                 imageFourierTransform(self, newImageData)
                 displayFrequencyComponent(self, self.component_selector.currentText())
 
+
             elif self.ftComponentLabel.underMouse():
-                pass
-    
+                parent = self.find_parent_window()
+                self.resizeRectangle()
+                    
+
+
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1094,8 +1253,56 @@ class ImageViewerWidget(ModernWindow):
 
             return adjusted_image
 
+    def resizeRectangle(self):
+        if self.resizing_edge is not None:
+            # Get the current position of the mouse
+            # Get the current Position
+            global_pos = QCursor.pos()
+            current_pos = self.ftComponentLabel.mapFromGlobal(global_pos)
+            
+            if self.resizing_edge == "topLeft":
+                # We need to change the value of topRight and bottomLeft
+                if current_pos.x() >= self.topRight.x() - 30 or current_pos.y() >= self.bottomLeft.y() - 30:
+                    return
+                self.topLeft = current_pos
+                self.topRight = QPoint(self.bottomRight.x(), self.topLeft.y())
+                self.bottomLeft = QPoint(self.topLeft.x(), self.bottomRight.y())
+
+            elif self.resizing_edge == "topRight":
+                if current_pos.x() <= self.topLeft.x() + 30 or current_pos.y() >= self.bottomRight.y() - 30:
+                    return
+                
+                # We need to change the value of topLeft and bottomRight
+                self.topRight = current_pos
+                self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
+                self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
+
+            elif self.resizing_edge == "bottomLeft":
+                if current_pos.x() >= self.bottomRight.x() - 30 or current_pos.y() <= self.topLeft.y() + 30:
+                    return
+                # We need to change the value of topLeft and bottomRight
+                self.bottomLeft = current_pos
+                self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
+                self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
+
+            elif self.resizing_edge == "bottomRight":
+                if current_pos.x() <= self.bottomLeft.x() + 30 or current_pos.y() <= self.topRight.y() + 30:
+                    return
+                # We need to change the value of topRight and bottomLeft
+                self.bottomRight = current_pos
+                self.topRight = QPoint(self.bottomRight.x(), self.topLeft.y())
+                self.bottomLeft = QPoint(self.topLeft.x(), self.bottomRight.y())
+            
+            parent = self.find_parent_window()
+            parent.topLeft= self.topLeft
+            parent.topRight = self.topRight
+            parent.bottomLeft = self.bottomLeft
+            parent.bottomRight = self.bottomRight
+
+            self.draw_rectangle(parent.viewers, parent.region)
 
 
+    
     def _setup_zoom_controls(self):
         zoom_layout = QHBoxLayout()
         
@@ -1121,7 +1328,7 @@ class ImageViewerWidget(ModernWindow):
             self.originalImageLabel.showLoadingSpinner()
             # Load image
             parent = self.find_parent_window()
-            print("My Parent is     ", parent)
+            print("My Parent is ", parent)
             self.image, self.imageData = loadImage(self, parent)
             self.qImage = convert_data_to_image(self.imageData)
             if self.qImage is None or self.imageData is None:
