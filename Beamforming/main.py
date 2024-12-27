@@ -321,7 +321,8 @@ class BeamformingSimulator(QMainWindow):
                 theta=np.linspace(-np.pi/2, np.pi/2, 1000),
                 x_field=self.x_field,
                 y_field=self.y_field,
-                steering_angles=steering_angles
+                steering_angles=steering_angles,
+                show_full_pattern=self.full_pattern_checkbox.isChecked()
             )
             
             # Update plots
@@ -344,46 +345,7 @@ class BeamformingSimulator(QMainWindow):
             import traceback
             traceback.print_exc()
 
-    def update_pattern(self):
-        """Update visualization with current array configuration"""
-        if not self.units_panel.has_active_units():
-            print("No active units found")
-            self.visualization_manager.clear_all()
-            return
 
-        # Get active units
-        active_units = self.units_panel.get_active_units()
-        print(f"Active units: {len(active_units)}")
-        
-        # Calculate patterns
-        pattern = self.field_calculator.calculate_pattern(active_units)
-        interference = self.field_calculator.calculate_interference(active_units)
-        positions = self.units_panel.get_array_positions()
-        steering_angles = self.units_panel.get_steering_angles()
-        
-        print(f"Calculated data:")
-        print(f"- Pattern: {pattern.shape if pattern is not None else None}")
-        print(f"- Interference: {interference.shape if interference is not None else None}")
-        print(f"- Positions: {len(positions) if positions else 0}")
-        print(f"- Steering angles: {steering_angles}")
-        
-        # Create visualization data
-        vis_data = VisualizationData(
-            pattern=pattern,
-            interference=interference,
-            array_positions=positions,
-            theta=np.linspace(-np.pi/2, np.pi/2, 1000),
-            x_field=self.x_field,
-            y_field=self.y_field,
-            steering_angles=steering_angles
-        )
-        
-        # Update plots
-        try:
-            self.visualization_manager.update_all(vis_data)
-            print("Plots updated successfully")
-        except Exception as e:
-            print(f"Error updating plots: {str(e)}")
 
     def save_scenario(self):
         """Save current scenario to file"""
@@ -426,15 +388,16 @@ class BeamformingSimulator(QMainWindow):
         print(f"Number of positions: {len(positions) if positions else 0}")
             
         vis_data = VisualizationData(
-            pattern=pattern,
-            interference=interference,
-            array_positions=positions,
+            pattern=self.field_calculator.calculate_pattern(self.units_panel.get_active_units()),
+            interference=self.field_calculator.calculate_interference(self.units_panel.get_active_units()),
+            array_positions=self.units_panel.get_array_positions(),
             theta=np.linspace(-np.pi/2, np.pi/2, 1000),
             x_field=self.x_field,
             y_field=self.y_field,
-            steering_angles=self.units_panel.get_steering_angles()
+            steering_angles=self.units_panel.get_steering_angles(),
+            show_full_pattern=self.full_pattern_checkbox.isChecked()  # Get checkbox state
         )
-            
+        
         self.visualization_manager.update_all(vis_data)
         
         # Force redraw all canvases
