@@ -196,7 +196,8 @@ def displayFrequencyComponent(self, PlottedComponent):
     
     parent = self.find_parent_window()
     parent.real_time_mix()
-    parent.draw_rectangle( parent.viewers ,parent.region)
+    if parent.region_size.isChecked():
+        parent.draw_rectangle( parent.viewers ,parent.region)
 
 
 

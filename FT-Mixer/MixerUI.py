@@ -338,6 +338,7 @@ class ModernWindow(QMainWindow):
 
             print("Real Time Mixing")
             print(f"Self: {self}")
+
             # Collect components
             components = []
             print(f"Viewers: {self.viewers}")
@@ -361,15 +362,19 @@ class ModernWindow(QMainWindow):
                             print(self.bottomLeft)
                             print(self.bottomRight)
 
-
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2 
                             print("Length of x Data")
-                            start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
-                            end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
+                            start_x, end_x = center_x , center_x
+                            start_y, end_y = center_y , center_y
 
-                            start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
-                            end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
+                            if self.region_size.isChecked():
+                                print("We are using ROF")
+                                start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
+                                end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
+
+                                start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
+                                end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
                             
 
 
@@ -569,10 +574,10 @@ class ModernWindow(QMainWindow):
         
         self.region = "Inner"
         # Lets Add a Check Box If user want to select the region of the image
-        self.region_size = QCheckBox("ROF")
+        self.region_size = QCheckBox("ROI")
         self.region_size.setChecked(False)
 
-        self.reset_btn = QPushButton("Reset ROF Dimensions")
+        self.reset_btn = QPushButton("Reset ROI Dimensions")
         self.reset_btn.clicked.connect(lambda: self.reset_rectangle(self.viewers))
         self.region_size.toggled.connect(lambda: self.clear_rectangle(self.viewers))
         region_controls_layout.addWidget(self.inner_region)
@@ -814,6 +819,7 @@ class ModernWindow(QMainWindow):
 
                 new_pixmap = original_pixmap.copy() 
                 viewer.ftComponentLabel.setPixmap(new_pixmap)
+            self.real_time_mix()
         else:
             self.draw_rectangle(viewers, self.region)
 
@@ -835,7 +841,11 @@ class ModernWindow(QMainWindow):
         else:
             self.inner_region.setChecked(False)
             self.outer_region.setChecked(True)
-        self.draw_rectangle(self.viewers  ,self.region)
+        
+        if self.region_size.isChecked():
+            self.draw_rectangle(self.viewers, self.region)
+        else:
+            self.real_time_mix()
         
 
     def update_mixing_mode(self, index):
