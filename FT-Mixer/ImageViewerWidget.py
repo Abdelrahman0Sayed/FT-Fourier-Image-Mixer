@@ -6,7 +6,6 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QMenu, QAction, QToolTip
 from functools import partial
-from Image_functions import loadImage, imageFourierTransform, displayFrequencyComponent, unify_images , convert_data_to_image, convet_mixed_to_qImage
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,11 +13,10 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5 import QtCore, QtGui, QtWidgets
-from mixer_functions import mix_magnitude_phase, mix_real_imaginary
-from control_functions import draw_rectangle, clear_rectangle
 from ImageDisplay import ImageDisplay
 import logging
 from MixerUI import ModernWindow
+from PIL import Image, ImageQt
 
 
 
@@ -93,6 +91,7 @@ class ImageViewerWidget(ModernWindow):
 
 
 
+
         self.build_ui(title)
         self._setup_animations()
 
@@ -158,7 +157,7 @@ class ImageViewerWidget(ModernWindow):
                 'FT Phase'
             ])
             self.component_selector.setToolTip("Select which Fourier component to view")
-            self.component_selector.currentIndexChanged.connect(lambda: displayFrequencyComponent(self, self.component_selector.currentText()))
+            self.component_selector.currentIndexChanged.connect(lambda: self.displayFrequencyComponent(self.component_selector.currentText()))
 
             ft_section.addWidget(self.component_selector)
 
@@ -214,11 +213,10 @@ class ImageViewerWidget(ModernWindow):
         # Get the top-level window
         parent = self.parentWidget()
         while parent:
-            print("My Parent is", parent)
             if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
                 return parent
             parent = parent.parentWidget()
-        return parent
+        return None
     
 
 
@@ -240,7 +238,37 @@ class ImageViewerWidget(ModernWindow):
                 self.last_pos = event.pos()
                 # No need to check for edges when adjusting brightness, just drag to adjust
             elif self.ftComponentLabel.underMouse():
-                pass
+                # Now we need to get the position of the mouse relative to the image that he is clicked on , if the position at one of the edges of the rectangle, we need to resize the rectangle
+                print("You trying to adjust the rectangle")
+                self.dragging = True
+                # I need to current Position depending the self.ftComponentLabel not the ImageViewerWidget
+
+
+                global_pos = event.globalPos()
+                self.last_pos = self.ftComponentLabel.mapFromGlobal(global_pos)
+
+                print("The Last Position is: ", self.last_pos)
+                self.resizing_edge = None
+
+                
+                # I want to check the position of the mouse relative to the edges of the rectangle with a threshold of 3 pixels
+                margin = 10
+                if  (self.last_pos.x() - self.topLeft.x() ) <= margin and ( self.last_pos.y() - self.topLeft.y() ) <= margin:
+                    self.resizing_edge = "topLeft"
+                
+                elif (self.last_pos.x() - self.topRight.x()) <= margin and (self.last_pos.y() - self.topRight.y()) <= margin:
+                    self.resizing_edge = "topRight"
+                
+                elif (self.last_pos.x() - self.bottomLeft.x()) <= margin and (self.last_pos.y() - self.bottomLeft.y()) <= margin:
+                    self.resizing_edge = "bottomLeft"
+                
+                elif (self.last_pos.x() - self.bottomRight.x()) <= margin and (self.last_pos.y() - self.bottomRight.y()) <= margin:
+                    self.resizing_edge = "bottomRight"
+                
+                print("The Resizing Edge is: ", self.resizing_edge)
+                self.resizeRectangle()
+                
+                
      
 
     def mouseMoveEvent(self, event):
@@ -259,12 +287,16 @@ class ImageViewerWidget(ModernWindow):
                 self.last_pos = event.pos()
 
                 # Process the adjusted image
-                imageFourierTransform(self, newImageData)
-                displayFrequencyComponent(self, self.component_selector.currentText())
+                self.imageFourierTransform(newImageData)
+                self.displayFrequencyComponent(self.component_selector.currentText())
+
 
             elif self.ftComponentLabel.underMouse():
-                pass
-    
+                parent = self.find_parent_window()
+                self.resizeRectangle()
+                    
+
+
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -305,8 +337,222 @@ class ImageViewerWidget(ModernWindow):
 
             return adjusted_image
 
+    def resizeRectangle(self):
+        if self.resizing_edge is not None:
+            # Get the current position of the mouse
+            # Get the current Position
+            global_pos = QCursor.pos()
+            current_pos = self.ftComponentLabel.mapFromGlobal(global_pos)
+            
+            if self.resizing_edge == "topLeft":
+                # We need to change the value of topRight and bottomLeft
+                if current_pos.x() >= self.topRight.x() - 30 or current_pos.y() >= self.bottomLeft.y() - 30:
+                    return
+                self.topLeft = current_pos
+                self.topRight = QPoint(self.bottomRight.x(), self.topLeft.y())
+                self.bottomLeft = QPoint(self.topLeft.x(), self.bottomRight.y())
+
+            elif self.resizing_edge == "topRight":
+                if current_pos.x() <= self.topLeft.x() + 30 or current_pos.y() >= self.bottomRight.y() - 30:
+                    return
+                
+                # We need to change the value of topLeft and bottomRight
+                self.topRight = current_pos
+                self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
+                self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
+
+            elif self.resizing_edge == "bottomLeft":
+                if current_pos.x() >= self.bottomRight.x() - 30 or current_pos.y() <= self.topLeft.y() + 30:
+                    return
+                # We need to change the value of topLeft and bottomRight
+                self.bottomLeft = current_pos
+                self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
+                self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
+
+            elif self.resizing_edge == "bottomRight":
+                if current_pos.x() <= self.bottomLeft.x() + 30 or current_pos.y() <= self.topRight.y() + 30:
+                    return
+                # We need to change the value of topRight and bottomLeft
+                self.bottomRight = current_pos
+                self.topRight = QPoint(self.bottomRight.x(), self.topLeft.y())
+                self.bottomLeft = QPoint(self.topLeft.x(), self.bottomRight.y())
+            
+            parent = self.find_parent_window()
+            parent.topLeft= self.topLeft
+            parent.topRight = self.topRight
+            parent.bottomLeft = self.bottomLeft
+            parent.bottomRight = self.bottomRight
+
+            self.draw_rectangle(parent.viewers, parent.region)
 
 
+
+
+    def loadImage(self, parent):
+        try:
+            filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
+            if filePath:
+                # Load the image
+                self.imageData = cv2.imread(filePath)
+                
+                # Convert to grayscale
+                grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
+                
+                row, column = grayScaledImage.shape
+                print(row, column)
+                print(parent.minimumSize)
+                
+                # This means that's the first image 
+                if parent.minimumSize == (0, 0):
+                    parent.minimumSize = (row, column)
+
+                if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
+                    parent.minimumSize = (row, column)
+                    print(parent.minimumSize)
+
+                #cv2.resize(grayScaledImage, (column,row))
+                self.unify_images(parent.viewers, parent.minimumSize)
+                #self.imageData = cv2.resize(self.imageData, (600,600))
+            
+                return grayScaledImage, self.imageData
+            
+            return 
+        except Exception as e:
+            print(f"Error: {e}")
+
+
+
+    def unify_images(self, viewers, minimumSize):
+        print("Unifying Images")
+        for viewer in viewers:
+            if viewer.imageData is not None:
+                # Resize the image using cv2.resize
+                target_row, target_column = minimumSize  # Assuming square resizing
+                viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
+                print(f"Image resized to: {viewer.imageData.shape}")
+                self.imageFourierTransform(viewer.imageData)
+
+
+    def imageFourierTransform(self, imageData):
+        fftComponents = np.fft.fft2(imageData)
+        fftComponentsShifted = np.fft.fftshift(fftComponents)
+        self.fftComponents= fftComponents
+        # Get Magnitude and Phase
+        self.ftMagnitudes = np.abs(fftComponents)
+        self.ftPhase = np.angle(fftComponents)
+        # Get the Real and Imaginary parts
+        self.ftReal = np.real(fftComponents)
+        self.ftImaginary = np.imag(fftComponents)
+        
+
+
+
+    def displayFrequencyComponent(self, PlottedComponent):
+        # Chnage all Selectors to the current component
+    
+        if PlottedComponent == "FT Magnitude":
+            # Take the Magnitude as log scale
+
+            #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+            ftMagnitudes = self.ftMagnitudes
+            ftLog = 15 * np.log(ftMagnitudes + 1e-10)
+            ftNormalized = (255 * (ftLog / ftLog.max())).astype(np.uint8)
+            
+            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
+            qimage = self.convert_from_pil_to_qimage(pil_image)
+            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
+            pixmap = QPixmap.fromImage(qimage)
+            label_height = self.ftComponentLabel.height()
+            label_width = self.ftComponentLabel.width()
+            
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.magnitudeImage = pixmap
+            self.ftComponentLabel.setPixmap(pixmap)
+            
+
+
+
+
+        elif PlottedComponent == "FT Phase":
+            # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
+            
+            
+            #ftPhases = np.fft.fftshift(self.ftPhase)
+            ftPhases = self.ftPhase
+
+            f_wrapped = np.angle(np.exp(1j * ftPhases))  
+            f_normalized = (f_wrapped + np.pi) / (2 * np.pi) * 255
+            
+            pil_image = Image.fromarray(np.uint8(f_normalized)) 
+            qimage = self.convert_from_pil_to_qimage(pil_image)
+            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
+            pixmap = QPixmap.fromImage(qimage)
+            label_height = self.ftComponentLabel.height()
+            label_width = self.ftComponentLabel.width()
+            
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.phaseImage = pixmap
+            
+            self.ftComponentLabel.setPixmap(pixmap)
+        
+        elif PlottedComponent == "FT Real":
+            
+            # Normalization and Adjustment for visualization
+            
+            #ftReals = np.fft.fftshift(self.ftReal)
+            ftReals = self.ftReal
+            ftNormalized = np.abs(ftReals)
+            
+            
+            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
+            qimage = self.convert_from_pil_to_qimage(pil_image)
+            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
+            pixmap = QPixmap.fromImage(qimage)
+            label_height = self.ftComponentLabel.height()
+            label_width = self.ftComponentLabel.width()
+            
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.realImage = pixmap
+            
+            self.ftComponentLabel.setPixmap(pixmap)
+        
+        elif PlottedComponent == "FT Imaginary":
+            
+            #ftImaginaries = np.fft.fftshift(self.ftImaginary)
+            ftImaginaries = self.ftImaginary
+            ftNormalized = np.abs(ftImaginaries)
+            
+            
+            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
+            qimage = self.convert_from_pil_to_qimage(pil_image)
+            
+            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
+            pixmap = QPixmap.fromImage(qimage)
+            label_height = self.ftComponentLabel.height()
+            label_width = self.ftComponentLabel.width()
+            
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.imaginaryImage = pixmap
+            self.ftComponentLabel.setPixmap(pixmap)
+        
+        
+        parent = self.find_parent_window()
+        parent.real_time_mix()
+        if parent.region_size.isChecked():
+            parent.draw_rectangle( parent.viewers ,parent.region)
+
+
+
+
+
+
+    def convert_from_pil_to_qimage(self, pilImage):
+            img_data = pilImage.tobytes()
+            qimage = QImage(img_data, pilImage.width, pilImage.height, pilImage.width * 3, QImage.Format_RGB888)
+            return qimage
+
+
+    
     def _setup_zoom_controls(self):
         zoom_layout = QHBoxLayout()
         
@@ -327,14 +573,33 @@ class ImageViewerWidget(ModernWindow):
         
         self.container.layout().addLayout(zoom_layout)
 
+
+    def convert_data_to_image(self, imageData):
+        try:
+            # Convert the image data to a QImage
+            height, width, channel = imageData.shape
+            bytesPerLine = 3 * width
+            qImg = QtGui.QImage(imageData.data, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
+            if qImg is None:
+                print("Error in converting image data to QImage")
+        
+            qImg = qImg.rgbSwapped()
+            grayscale_qImg = qImg.convertToFormat(QtGui.QImage.Format_Grayscale8)
+            
+            return grayscale_qImg
+        except Exception as e:
+            print(e)
+
+
+
     def apply_effect(self):
         try:            
             self.originalImageLabel.showLoadingSpinner()
             # Load image
             parent = self.find_parent_window()
             print("My Parent is ", parent)
-            self.image, self.imageData = loadImage(self, parent)
-            self.qImage = convert_data_to_image(self.imageData)
+            self.image, self.imageData = self.loadImage(parent)
+            self.qImage = self.convert_data_to_image(self.imageData)
             if self.qImage is None or self.imageData is None:
                 raise Exception("Failed to load image")
             print("Image Loaded")
@@ -352,8 +617,8 @@ class ImageViewerWidget(ModernWindow):
             )
             self.originalImageLabel.setPixmap(pixmapImage)
             
-            imageFourierTransform(self, self.imageData)                
-            displayFrequencyComponent(self, "FT Magnitude")
+            self.imageFourierTransform(self.imageData)                
+            self.displayFrequencyComponent("FT Magnitude")
             parent.real_time_mix()
             
 
