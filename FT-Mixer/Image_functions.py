@@ -24,51 +24,8 @@ from PyQt5.QtGui import *
 from PIL import Image, ImageQt
 
 
-def loadImage(self, parent):
-    try:
-        filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
-        if filePath:
-            # Load the image
-            self.imageData = cv2.imread(filePath)
-            
-            # Convert to grayscale
-            grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
-            
-            row, column = grayScaledImage.shape
-            print(row, column)
-            print(parent.minimumSize)
-            
-            # This means that's the first image 
-            if parent.minimumSize == (0, 0):
-                parent.minimumSize = (row, column)
 
-            if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
-                parent.minimumSize = (row, column)
-                print(parent.minimumSize)
-
-            #cv2.resize(grayScaledImage, (column,row))
-            unify_images(self, parent.viewers, parent.minimumSize)
-            #self.imageData = cv2.resize(self.imageData, (600,600))
-        
-            return grayScaledImage, self.imageData
-        
-        return 
-    except Exception as e:
-        print(f"Error: {e}")
-
-
-
-def unify_images(self, viewers, minimumSize):
-    print("Unifying Images")
-    for viewer in viewers:
-        if viewer.imageData is not None:
-            # Resize the image using cv2.resize
-            target_row, target_column = minimumSize  # Assuming square resizing
-            viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
-            print(f"Image resized to: {viewer.imageData.shape}")
-            imageFourierTransform(viewer , viewer.imageData)
-
-
+  
 
 def convert_data_to_image(imageData):
     try:
@@ -85,21 +42,6 @@ def convert_data_to_image(imageData):
         return grayscale_qImg
     except Exception as e:
         print(e)
-
-
-
-
-def imageFourierTransform(self, imageData):
-    fftComponents = np.fft.fft2(imageData)
-    fftComponentsShifted = np.fft.fftshift(fftComponents)
-    self.fftComponents= fftComponents
-    # Get Magnitude and Phase
-    self.ftMagnitudes = np.abs(fftComponents)
-    self.ftPhase = np.angle(fftComponents)
-    # Get the Real and Imaginary parts
-    self.ftReal = np.real(fftComponents)
-    self.ftImaginary = np.imag(fftComponents)
-    
 
 
 
@@ -189,7 +131,7 @@ def displayFrequencyComponent(self, PlottedComponent):
         label_height = self.ftComponentLabel.height()
         label_width = self.ftComponentLabel.width()
         
-        pixmap = pixmap.scaled(300, 300, Qt.ignoreAspectRatio)
+        pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
         self.imaginaryImage = pixmap
         self.ftComponentLabel.setPixmap(pixmap)
     

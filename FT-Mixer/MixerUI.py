@@ -6,7 +6,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import QMenu, QAction, QToolTip
 from functools import partial
-from Image_functions import loadImage, imageFourierTransform, displayFrequencyComponent, unify_images , convert_data_to_image, convet_mixed_to_qImage
+from Image_functions import  displayFrequencyComponent , convert_data_to_image, convet_mixed_to_qImage
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5 import QtCore, QtGui, QtWidgets
-from mixer_functions import mix_magnitude_phase, mix_real_imaginary
 from ImageDisplay import ImageDisplay
 import logging
 
@@ -298,9 +297,9 @@ class ModernWindow(QMainWindow):
             # Get mixing type and perform mix
             mix_type = self.mix_type.currentText()
             if mix_type == "Magnitude/Phase":
-                result = mix_magnitude_phase(self, components, )
+                result = self.mix_magnitude_phase(components)
             else:
-                result =  mix_real_imaginary(self, components)
+                result =  self.mix_real_imaginary(components)
             
             QApplication.processEvents()
             # Cause of the data doesn't apply Shifting of zero by default
@@ -432,9 +431,9 @@ class ModernWindow(QMainWindow):
             # Get mixing type and perform mix
             mix_type = self.mix_type.currentText()
             if mix_type == "Magnitude/Phase":
-                result = mix_magnitude_phase(self, components)
+                result = self.mix_magnitude_phase(components)
             else:
-                result = mix_real_imaginary(self, components)
+                result = self.mix_real_imaginary(components)
 
             #self.mix_progress.setValue(80)
             QApplication.processEvents()
@@ -470,6 +469,85 @@ class ModernWindow(QMainWindow):
             QTimer.singleShot(500, lambda: self._finish_mixing())
             
 
+
+
+    def mix_magnitude_phase(self, components):
+
+        try:
+            print("Start Mixing")
+            first_ft = components[0]['ft']
+            result = np.zeros_like(first_ft, dtype=complex)
+            print(1)
+            # Mix magnitudes
+            total_magnitude = np.zeros_like(np.abs(first_ft))
+            for comp in components:
+                weight = comp['weight']
+                type = comp['type']
+                if type == "FT Magnitude":
+                    magnitude = np.abs(comp['ft'])
+                else:
+                    magnitude = 0
+                magnitude = np.abs(comp['ft'])
+                total_magnitude += weight * magnitude
+            print("Magnitude Done")
+            
+            print(2)
+            # Mix phases
+            total_phase = np.zeros_like(np.angle(first_ft))
+            for comp in components:
+                weight = comp['weight']
+                type = comp['type']
+                phase = np.angle(comp['ft'])
+                if type == "FT Phase":
+                    phase = np.angle(comp['ft'])
+                else:
+                    phase = 0
+                total_phase += weight * phase
+            print("Phase Done")
+
+            # Combine magnitude and phase
+            result = total_magnitude * np.exp(1j * total_phase)
+            print("Mixing Done")
+
+            return result
+            
+        except Exception as e:
+            print(f"Error in magnitude/phase mixing: {str(e)}")
+            raise
+
+
+
+
+    def mix_real_imaginary(self, components):
+        try:
+            first_ft = components[0]['ft']
+            result = np.zeros_like(first_ft, dtype=complex)
+            
+            # Mix real parts
+            for comp in components:
+                weight = comp['weight']
+                type = comp['type']
+                if type == "FT Real":
+                    real = np.real(comp['ft'])
+                else:
+                    real = 0
+                result.real += weight * comp['ft'].real
+            
+            # Mix imaginary parts
+            for comp in components:
+                weight = comp['weight']
+                type = comp['type']
+                if type == "FT Imaginary":
+                    imag = np.imag(comp['ft'])
+                else:
+                    imag = 0
+                result.imag += weight * comp['ft'].imag
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in real/imaginary mixing: {str(e)}")
+            raise
 
 
 
@@ -1213,7 +1291,7 @@ class ImageViewerWidget(ModernWindow):
                 self.last_pos = event.pos()
 
                 # Process the adjusted image
-                imageFourierTransform(self, newImageData)
+                self.imageFourierTransform(newImageData)
                 displayFrequencyComponent(self, self.component_selector.currentText())
 
 
@@ -1312,6 +1390,74 @@ class ImageViewerWidget(ModernWindow):
             self.draw_rectangle(parent.viewers, parent.region)
 
 
+
+
+    def loadImage(self, parent):
+        try:
+            filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
+            if filePath:
+                # Load the image
+                self.imageData = cv2.imread(filePath)
+                
+                # Convert to grayscale
+                grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
+                
+                row, column = grayScaledImage.shape
+                print(row, column)
+                print(parent.minimumSize)
+                
+                # This means that's the first image 
+                if parent.minimumSize == (0, 0):
+                    parent.minimumSize = (row, column)
+
+                if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
+                    parent.minimumSize = (row, column)
+                    print(parent.minimumSize)
+
+                #cv2.resize(grayScaledImage, (column,row))
+                self.unify_images(parent.viewers, parent.minimumSize)
+                #self.imageData = cv2.resize(self.imageData, (600,600))
+            
+                return grayScaledImage, self.imageData
+            
+            return 
+        except Exception as e:
+            print(f"Error: {e}")
+
+
+
+    def unify_images(self, viewers, minimumSize):
+        print("Unifying Images")
+        for viewer in viewers:
+            if viewer.imageData is not None:
+                # Resize the image using cv2.resize
+                target_row, target_column = minimumSize  # Assuming square resizing
+                viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
+                print(f"Image resized to: {viewer.imageData.shape}")
+                self.imageFourierTransform(viewer.imageData)
+
+
+
+
+
+
+
+
+    def imageFourierTransform(self, imageData):
+        fftComponents = np.fft.fft2(imageData)
+        fftComponentsShifted = np.fft.fftshift(fftComponents)
+        self.fftComponents= fftComponents
+        # Get Magnitude and Phase
+        self.ftMagnitudes = np.abs(fftComponents)
+        self.ftPhase = np.angle(fftComponents)
+        # Get the Real and Imaginary parts
+        self.ftReal = np.real(fftComponents)
+        self.ftImaginary = np.imag(fftComponents)
+        
+
+
+
+
     
     def _setup_zoom_controls(self):
         zoom_layout = QHBoxLayout()
@@ -1339,7 +1485,7 @@ class ImageViewerWidget(ModernWindow):
             # Load image
             parent = self.find_parent_window()
             print("My Parent is ", parent)
-            self.image, self.imageData = loadImage(self, parent)
+            self.image, self.imageData = self.loadImage(parent)
             self.qImage = convert_data_to_image(self.imageData)
             if self.qImage is None or self.imageData is None:
                 raise Exception("Failed to load image")
@@ -1358,7 +1504,7 @@ class ImageViewerWidget(ModernWindow):
             )
             self.originalImageLabel.setPixmap(pixmapImage)
             
-            imageFourierTransform(self, self.imageData)                
+            self.imageFourierTransform(self.imageData)                
             displayFrequencyComponent(self, "FT Magnitude")
             parent.real_time_mix()
             
