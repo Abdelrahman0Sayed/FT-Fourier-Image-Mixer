@@ -1347,15 +1347,21 @@ class ImageViewerWidget(ModernWindow):
 
 
     def imageFourierTransform(self, imageData):
+        width, height = self.qImage.width() , self.qImage.height()
+        ptr = self.qImage.bits()
+        ptr.setsize(width * height)
+        newImageData = np.frombuffer(ptr , np.uint8).reshape((height, width))
+        print(newImageData)
+
         fftComponents = np.fft.fft2(imageData)
         fftComponentsShifted = np.fft.fftshift(fftComponents)
         self.fftComponents= fftComponents
         # Get Magnitude and Phase
-        self.ftMagnitudes = np.abs(fftComponents)
-        self.ftPhase = np.angle(fftComponents)
+        self.ftMagnitudes = np.abs(self.fftComponents)
+        self.ftPhase = np.angle(self.fftComponents)
         # Get the Real and Imaginary parts
-        self.ftReal = np.real(fftComponents)
-        self.ftImaginary = np.imag(fftComponents)
+        self.ftReal = np.real(self.fftComponents)
+        self.ftImaginary = np.imag(self.fftComponents)
         
 
 
@@ -1366,12 +1372,12 @@ class ImageViewerWidget(ModernWindow):
         if PlottedComponent == "FT Magnitude":
             # Take the Magnitude as log scale
 
-            ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-            #ftMagnitudes = self.ftMagnitudes
-            ftLog = np.log(ftMagnitudes)
-            ftNormalized = (255 * (ftLog / ftLog.max())).astype(np.uint8)
+            #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+            ftMagnitudes = self.ftMagnitudes
+            ftLog = 15 * np.log(ftMagnitudes)
+            ftNormalized = cv2.normalize(ftLog , None , 0, 255 , cv2.NORM_MINMAX).astype(np.uint8)
             
-            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
+            pil_image = Image.fromarray(np.uint8(ftLog)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
             qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
