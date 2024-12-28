@@ -6,15 +6,17 @@ from gui import ModernButton, ModernSlider
 from array_unit import ArrayUnit
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QMessageBox, QComboBox, QTableWidgetItem
+from scenarios import ScenarioManager
 import logging
 
 class UnitControlPanel:
     def __init__(self, parent):
         self.parent = parent
         self.editing_mode = False
-        self.current_unit_id = 0
+        self.scenario_manager = ScenarioManager()  # Add scenario manager reference
         self.array_units = []
         self.selected_unit_id = None
+
 
 
     def create_array_units_panel(self):
@@ -279,33 +281,44 @@ class UnitControlPanel:
 
             self.selected_unit_id = unit_id
 
-            # Define controls list
+            # Block all control signals individually
             controls = [
-                (self.unit_x, unit.x_pos),
-                (self.unit_y, unit.y_pos),
-                (self.unit_elements, unit.num_elements),
-                (self.unit_spacing, unit.element_spacing),
-                (self.unit_steering, unit.steering_angle),
-                (self.unit_curvature, unit.curvature_factor),
-                (self.geometry_type, unit.geometry_type)
+                self.unit_x,
+                self.unit_y, 
+                self.unit_elements,
+                self.unit_spacing,
+                self.unit_steering,
+                self.unit_curvature,
+                self.geometry_type,
+                self.freq_table
             ]
-
-            # Update controls with signal blocking
-            with QSignalBlocker(self.parent):
-                for control, value in controls:
-                    if isinstance(control, QComboBox):
-                        control.setCurrentText(str(value))
-                    else:
-                        control.setValue(float(value))
+            
+            # Create blockers for each control
+            blockers = [QSignalBlocker(control) for control in controls]
+            
+            try:
+                # Update controls
+                self.unit_x.setValue(float(unit.x_pos))
+                self.unit_y.setValue(float(unit.y_pos))
+                self.unit_elements.setValue(int(unit.num_elements))
+                self.unit_spacing.setValue(float(unit.element_spacing))
+                self.unit_steering.setValue(float(unit.steering_angle))
+                self.unit_curvature.setValue(float(unit.curvature_factor))
+                self.geometry_type.setCurrentText(str(unit.geometry_type))
                 
+                # Update curvature visibility
                 self.curvature_widget.setVisible(unit.geometry_type == "Curved")
 
-            # Update frequency table
-            self.freq_table.setRowCount(0)
-            for row, freq in enumerate(unit.operating_freqs):
-                self.freq_table.insertRow(row)
-                self.freq_table.setItem(row, 0, QTableWidgetItem(str(freq)))
-                self.freq_table.setItem(row, 1, QTableWidgetItem("MHz"))
+                # Update frequency table
+                self.freq_table.setRowCount(0)
+                for row, freq in enumerate(unit.operating_freqs):
+                    self.freq_table.insertRow(row)
+                    self.freq_table.setItem(row, 0, QTableWidgetItem(str(freq)))
+                    self.freq_table.setItem(row, 1, QTableWidgetItem("MHz"))
+
+            finally:
+                # Blockers are automatically released when they go out of scope
+                pass
 
             # Update edit mode state
             self.add_edit_button.setText("Exit Edit Mode")
@@ -392,6 +405,7 @@ class UnitControlPanel:
     def add_array_unit(self):
         try:
             # Get current frequencies
+            unit_id = self.scenario_manager.next_unit_id
             frequencies = []
             for row in range(self.freq_table.rowCount()):
                 freq_item = self.freq_table.item(row, 0)
@@ -406,7 +420,7 @@ class UnitControlPanel:
             if ok and name:
                 # Create new unit
                 unit = ArrayUnit(
-                    id=self.current_unit_id,
+                    id=unit_id,
                     name=name,
                     x_pos=self.unit_x.value(),
                     y_pos=self.unit_y.value(),
@@ -421,7 +435,6 @@ class UnitControlPanel:
                 
                 # Add unit and update ID
                 self.array_units.append(unit)
-                self.current_unit_id += 1
                 
                 # Update UI
                 self.update_units_list()

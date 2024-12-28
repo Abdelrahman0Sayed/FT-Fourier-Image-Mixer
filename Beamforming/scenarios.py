@@ -19,7 +19,14 @@ class ScenarioManager:
     def __init__(self):
         self.scenarios: Dict[ScenarioType, Scenario] = self._setup_preset_scenarios()
         self.current_scenario: Optional[Scenario] = None
-        self.current_unit_id = 0
+        self._next_unit_id = 0
+
+    @property 
+    def next_unit_id(self):
+        """Get next available ID and increment counter"""
+        current_id = self._next_unit_id
+        self._next_unit_id += 1
+        return current_id
 
     def save_scenario(self, filename: str, scenario: Scenario) -> None:
         """Save a scenario to a JSON file"""
@@ -44,6 +51,8 @@ class ScenarioManager:
         
         with open(filename, 'w') as f:
             json.dump(scenario_data, f, indent=4)
+
+    
 
     def load_scenario(self, filename: str) -> Scenario:
         """Load a scenario from a JSON file"""
@@ -77,7 +86,7 @@ class ScenarioManager:
         
         for unit_data in scenario.units:
             array_unit = ArrayUnit(
-                id=self.current_unit_id,
+                id=self.next_unit_id,  # Use property to get unique ID
                 name=unit_data["name"],
                 num_elements=unit_data["num_elements"],
                 element_spacing=unit_data["element_spacing"], 
@@ -90,7 +99,6 @@ class ScenarioManager:
                 enabled=True
             )
             array_units.append(array_unit)
-            self.current_unit_id += 1
             
         return array_units
 
@@ -120,7 +128,7 @@ class ScenarioManager:
                     "num_elements": 16,
                     "element_spacing": 0.06,
                     "steering_angle": 0,
-                    "geometry_type": "Curved", 
+                    "geometry_type": "Linear", 
                     "curvature_factor": 1.5,
                     "operating_freqs": [0.5],
                     "x_pos": 0,

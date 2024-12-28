@@ -33,6 +33,7 @@ class BasePlot(ABC):
 class PatternPlot(BasePlot):
     def update(self, theta, pattern, steering_angles, show_full_pattern=False):
         # Input validation
+        
         if pattern is None or len(pattern) == 0 or theta is None:
             print("Invalid pattern or theta data")
             self.clear()
@@ -64,8 +65,8 @@ class PatternPlot(BasePlot):
         # Setup plot
         self.figure.clear()
         ax = self.figure.add_subplot(111, projection='polar')
-        #x.set_theta_zero_location('N')
-        #x.set_theta_direction(-1)
+        ax.set_theta_zero_location('N')  # Set 0° at top
+        ax.set_theta_direction(-1)       # Counterclockwise rotation
         
         # Define masks with better thresholds
         main_lobe_threshold = -3  # -3dB point
@@ -141,6 +142,7 @@ class PatternPlot(BasePlot):
 
 class InterferencePlot(BasePlot):
     def update(self, x, y, interference):
+        # Input validation
         if interference is None or x is None or y is None:
             self.clear()
             return
@@ -149,46 +151,49 @@ class InterferencePlot(BasePlot):
             print("Invalid interference data type")
             return
             
-        print(f"Interference stats - Min: {np.min(interference)}, Max: {np.max(interference)}")
-            
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        
-        # Convert to dB with proper handling
+        # Data processing
         magnitude = np.abs(interference)
         max_value = np.max(magnitude)
         
         if max_value > 0:
             db_values = 20 * np.log10(magnitude / max_value)
-            # Clip to reasonable dB range
             db_values = np.clip(db_values, -60, 0)
         else:
             print("Warning: Zero magnitude interference pattern")
             db_values = np.zeros_like(magnitude) - 60
             
+        print(f"Interference stats - Min: {np.min(interference)}, Max: {np.max(interference)}")
         print(f"dB values - Min: {np.min(db_values)}, Max: {np.max(db_values)}")
         
-        im = ax.imshow(db_values,
-                      extent=[x.min(), x.max(), y.min(), y.max()],
-                      origin='lower',
-                      cmap=self.config.cmap,
-                      aspect='equal',
-                      vmin=self.config.vmin,
-                      vmax=self.config.vmax)
+        # Plot creation
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
         
-        self._setup_axis_style(ax)
-        ax.set_title('Interference Pattern (dB)', 
-                    color=self.config.text_color, pad=10)
+        im = ax.imshow(db_values,
+                    extent=[x.min(), x.max(), y.min(), y.max()],
+                    origin='lower',
+                    cmap=self.config.cmap,
+                    aspect='equal',
+                    vmin=self.config.vmin,
+                    vmax=self.config.vmax)
+        
+        # Styling
+        ax.set_title('Interference Pattern (dB)', color=self.config.text_color, pad=10)
         ax.set_xlabel('X Position (λ)', color=self.config.text_color)
         ax.set_ylabel('Y Position (λ)', color=self.config.text_color)
+        ax.grid(True, color='#404040', alpha=0.5, linestyle='--')
+        ax.tick_params(colors=self.config.text_color)
         
+        # Colorbar
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.05)
         cbar = self.figure.colorbar(im, cax=cax, label='Relative Power (dB)')
         cbar.ax.yaxis.label.set_color(self.config.text_color)
         cbar.ax.tick_params(colors=self.config.text_color)
         
+        # Final layout
         self.figure.tight_layout()
+
 
 class ArrayGeometryPlot(BasePlot):
     def _set_axis_limits(self, ax, x_positions, y_positions, min_range=1.0):
