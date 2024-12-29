@@ -16,7 +16,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from ImageDisplay import ImageDisplay
 from PIL import Image, ImageQt
 import logging
-
+from BaseUI import BaseUI
 
 
 logging.basicConfig(
@@ -68,12 +68,12 @@ class ModernWindow(QMainWindow):
         self.threshold = QPoint(3, 3)
 
         self.outputViewers = []
-
+    
         print(self.skip_setup_ui)
         if not skip_setup_ui:
             print("Let's Call Function")
             self.buildUI()
-
+        
         self._setup_theme()
         self.oldPos = None
         self.controller = None
@@ -825,19 +825,30 @@ class ModernWindow(QMainWindow):
         
 
     def update_mixing_mode(self, index):
-        mode = self.mix_type.currentText()
-        if mode == "Magnitude/Phase":
-            # Make Component Selector be just FT Magnitude and FT Phase
+        try:
+            mode = self.mix_type.currentText()
+            components = ['FT Magnitude', 'FT Phase'] if mode == "Magnitude/Phase" else ['FT Real', 'FT Imaginary']
+            
             for viewer in self.viewers:
+                # Skip viewers without image data
+                if not hasattr(viewer, 'imageData') or viewer.imageData is None:
+                    print(f"Skipping viewer {viewer} - no image data")
+                    continue
+                    
+                # Update component selector
                 viewer.component_selector.clear()
-                viewer.component_selector.addItems(['FT Magnitude', 'FT Phase'])
-        else:
-            # Make Component Selector be just FT Real and FT Imaginary
-            for viewer in self.viewers:
-                viewer.component_selector.clear()
-                viewer.component_selector.addItems(['FT Real', 'FT Imaginary'])
-
-        self.real_time_mix()
+                viewer.component_selector.addItems(components)
+                
+            # Only mix if we have valid data
+            if any(hasattr(v, 'imageData') and v.imageData is not None for v in self.viewers):
+                self.real_time_mix()
+            else:
+                print("No valid image data to mix")
+                
+        except Exception as e:
+            print(f"Error updating mixing mode: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
 
 
@@ -1287,9 +1298,6 @@ class ImageViewerWidget(ModernWindow):
 
             self.draw_rectangle(parent.viewers, parent.region)
 
-
-
-
     def loadImage(self, parent):
         try:
             filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
@@ -1313,8 +1321,8 @@ class ImageViewerWidget(ModernWindow):
                     print(parent.minimumSize)
 
                 #cv2.resize(grayScaledImage, (column,row))
-                self.unify_images(parent.viewers, parent.minimumSize)
-                #self.imageData = cv2.resize(self.imageData, (600,600))
+                #self.unify_images(parent.viewers, parent.minimumSize)
+                self.imageData = cv2.resize(self.imageData, (600,600))
             
                 return grayScaledImage, self.imageData
             
@@ -1336,17 +1344,21 @@ class ImageViewerWidget(ModernWindow):
 
 
     def imageFourierTransform(self, imageData):
+        width, height = self.qImage.width() , self.qImage.height()
+        ptr = self.qImage.bits()
+        ptr.setsize(width * height)
+        newImageData = np.frombuffer(ptr , np.uint8).reshape((height, width))
+        print(newImageData)
+
         fftComponents = np.fft.fft2(imageData)
         fftComponentsShifted = np.fft.fftshift(fftComponents)
         self.fftComponents= fftComponents
         # Get Magnitude and Phase
-        self.ftMagnitudes = np.abs(fftComponents)
-        self.ftPhase = np.angle(fftComponents)
+        self.ftMagnitudes = np.abs(self.fftComponents)
+        self.ftPhase = np.angle(self.fftComponents)
         # Get the Real and Imaginary parts
-        self.ftReal = np.real(fftComponents)
-        self.ftImaginary = np.imag(fftComponents)
-        
-
+        self.ftReal = np.real(self.fftComponents)
+        self.ftImaginary = np.imag(self.fftComponents)
 
 
     def displayFrequencyComponent(self, PlottedComponent):
@@ -1357,10 +1369,10 @@ class ImageViewerWidget(ModernWindow):
 
             #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
             ftMagnitudes = self.ftMagnitudes
-            ftLog = 15 * np.log(ftMagnitudes + 1e-10)
-            ftNormalized = (255 * (ftLog / ftLog.max())).astype(np.uint8)
+            ftLog = 15 * np.log(ftMagnitudes)
+            ftNormalized = cv2.normalize(ftLog , None , 0, 255 , cv2.NORM_MINMAX).astype(np.uint8)
             
-            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
+            pil_image = Image.fromarray(np.uint8(ftLog)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
             qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
@@ -1372,13 +1384,8 @@ class ImageViewerWidget(ModernWindow):
             self.ftComponentLabel.setPixmap(pixmap)
             
 
-
-
-
         elif PlottedComponent == "FT Phase":
             # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
-            
-            
             #ftPhases = np.fft.fftshift(self.ftPhase)
             ftPhases = self.ftPhase
 
@@ -1404,7 +1411,6 @@ class ImageViewerWidget(ModernWindow):
             #ftReals = np.fft.fftshift(self.ftReal)
             ftReals = self.ftReal
             ftNormalized = np.abs(ftReals)
-            
             
             pil_image = Image.fromarray(np.uint8(ftNormalized)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
@@ -1442,7 +1448,6 @@ class ImageViewerWidget(ModernWindow):
         parent.real_time_mix()
         if parent.region_size.isChecked():
             parent.draw_rectangle( parent.viewers ,parent.region)
-
 
 
 

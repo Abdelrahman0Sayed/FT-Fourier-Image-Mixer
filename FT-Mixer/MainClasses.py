@@ -4,30 +4,21 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtWidgets import QMenu, QAction, QToolTip
-from functools import partial
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5 import QtGui
 from ImageDisplay import ImageDisplay
-from PIL import Image, ImageQt
+from PIL import Image
 import logging
-
-
-
 logging.basicConfig(
     level=logging.DEBUG,  # Set the logging level
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     filename="app.log",  # Log to a file
     filemode="a",  # Append to the file; use "w" for overwriting
 )
-
-# Define color palette
-# Define color palette with better contrast and cohesion
 COLORS = {
     'background': '#1E1E1E',  # Darker background
     'surface': '#252526',     # Slightly lighter surface
@@ -40,9 +31,6 @@ COLORS = {
     'warning': '#FFA726',
     'info': '#29B6F6'
 }
-
-
-# Add to COLORS dictionary
 COLORS.update({
     'hover': '#404040',
     'success': '#4CAF50', 
@@ -50,9 +38,8 @@ COLORS.update({
     'info': '#29B6F6'
 })
 
-
 class ModernWindow(QMainWindow):
-    
+
     def __init__(self, imageWidget=None , skip_setup_ui=False):
         super().__init__() 
         self.skip_setup_ui = skip_setup_ui  
@@ -66,24 +53,17 @@ class ModernWindow(QMainWindow):
         self.bottomLeft = QPoint(75, 225)
         self.bottomRight = QPoint(225, 225)    
         self.threshold = QPoint(3, 3)
-
         self.outputViewers = []
-
         print(self.skip_setup_ui)
         if not skip_setup_ui:
             print("Let's Call Function")
             self.buildUI()
-
         self._setup_theme()
         self.oldPos = None
         self.controller = None
         self._setup_shortcuts()
-        #self._setup_statusbar()
-        self._setup_menus()
-        
         self.undo_stack = []
         self.redo_stack = []
-
         self.is_mixing = False
         self.mix_timer = QTimer()
         self.mix_timer.setSingleShot(True)
@@ -91,27 +71,18 @@ class ModernWindow(QMainWindow):
 
     def _perform_real_time_mix(self):
         if self.is_mixing:
-            return
-            
+            return 
         try:
             self.is_mixing = True
-            #self.mix_button.setEnabled(False)
-            # self.mix_progress.setValue(0)
-            # self.mix_progress.show()
             QApplication.processEvents()  # Force UI update
-            
-            # Perform mixing
             self.real_time_mix()
-            
         finally:
             QTimer.singleShot(500, lambda: self._finish_mixing())  # Delay hiding
-
 
     def schedule_real_time_mix(self):
         if not self.is_mixing:
             self.mix_timer.stop()
             self.mix_timer.start(600)  # 200ms debounce
-
 
     def _setup_theme(self):
         self.setStyleSheet(f"""
@@ -216,10 +187,8 @@ class ModernWindow(QMainWindow):
         try:
             # Show progress bar at start
             QApplication.processEvents()
-
             print("Real Time Mixing")
             print(f"Self: {self}")
-
             # Collect components
             components = []
             print(f"Viewers: {self.viewers}")
@@ -232,23 +201,13 @@ class ModernWindow(QMainWindow):
                         if self.inner_region.isChecked():
                             print("Mixing Ineer Data")
                             data_percentage = self.rectSize / 300
-
                             # Create zero array same size as shifted input
                             ftComponents = np.zeros_like(viewer.fftComponents)
-                            # Calculate region bounds (now centered at image center)
-                            # Get the position of the top left corner of the rectangle and normalize it to the size of the image to know the start index 
-                            
-                            print(self.topLeft)
-                            print(self.topRight)
-                            print(self.bottomLeft)
-                            print(self.bottomRight)
-
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2 
                             print("Length of x Data")
                             start_x, end_x = center_x , center_x
                             start_y, end_y = center_y , center_y
-
                             if self.region_size.isChecked():
                                 print("We are using ROF")
                                 start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
@@ -256,12 +215,6 @@ class ModernWindow(QMainWindow):
 
                                 start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
                                 end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
-                            
-
-
-                            print(f"X starting from {start_x} and ends on {end_x}")
-                            print(f"Y starting from {start_y} and ends on {end_y}")
-
 
                             # Copy only inner region from shifted data, rest remains zero
                             ftComponents[
@@ -277,26 +230,21 @@ class ModernWindow(QMainWindow):
                             ftComponents = np.copy(viewer.fftComponents)  # Make a copy of the FFT components
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2
-                            
-                            region_size_row = int(data_percentage * viewer.fftComponents.shape[0])
-                            region_size_col = int(data_percentage * viewer.fftComponents.shape[1])
+                            start_x, end_x = center_x , center_x
+                            start_y, end_y = center_y , center_y
+                            if self.region_size.isChecked():
+                                print("We are using ROF")
+                                start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
+                                end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
 
-                            # Define the slice indices explicitly as integers
-                            center_x = viewer.fftComponents.shape[0] // 2
-                            center_y = viewer.fftComponents.shape[1] // 2 
-                            print("Length of x Data")
-                            start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
-                            end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
-
-                            start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
-                            end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
+                                start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
+                                end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
 
                             # Zero out the desired region using slicing
                             ftComponents[center_x - start_x: center_x + end_x, 
                                          center_y - start_y: center_y + end_y] = 0
 
                     weight = viewer.weight1_slider.value() / 100.0
-
                     components.append({
                         'ft': ftComponents.copy(),
                         'weight': weight,
@@ -367,8 +315,6 @@ class ModernWindow(QMainWindow):
             QTimer.singleShot(500, lambda: self._finish_mixing())
             
 
-
-
     def mix_magnitude_phase(self, components):
 
         try:
@@ -414,8 +360,6 @@ class ModernWindow(QMainWindow):
             raise
 
 
-
-
     def mix_real_imaginary(self, components):
         try:
             first_ft = components[0]['ft']
@@ -451,7 +395,6 @@ class ModernWindow(QMainWindow):
 
     def buildUI(self):
         # Main container
-
         logging.info("Starting Application.")
         self._ui_initialized = True
         self.container = QWidget()
@@ -629,6 +572,18 @@ class ModernWindow(QMainWindow):
         self.setCentralWidget(self.container)
         self._setup_connection()
 
+
+    def unify_images(self, minimumSize):
+        for viewer in self.viewers:
+            imageData = viewer.get_image_data()
+            if viewer.imageData is not None:
+                # Resize the image using cv2.resize
+                target_row, target_column = minimumSize  # Assuming square resizing
+                viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
+                print(f"Image resized to: {viewer.imageData.shape}")
+                self.imageFourierTransform(viewer.imageData)
+
+
     def start_loading(self):
         #self.mix_progress.show()  # Show the progress bar
         #self.mix_progress.setValue(0)  # Reset to 0
@@ -671,46 +626,34 @@ class ModernWindow(QMainWindow):
                     pixmapType = viewer.component_selector.currentText()
                     if pixmapType == "FT Magnitude":
                         original_pixmap = viewer.magnitudeImage 
-
                     elif pixmapType == "FT Phase":
                         original_pixmap = viewer.imageWidget.phaseImage
-
                     elif pixmapType == "FT Real":
                         original_pixmap = viewer.imageWidget.realImage
-
                     elif pixmapType == "FT Imaginary":
                         original_pixmap = viewer.imageWidget.imaginaryImage
 
                     if original_pixmap is None:
                         continue 
                     new_pixmap = original_pixmap.copy() 
-
                     painter = QPainter(new_pixmap)
-
                     painter.setOpacity(0.2) 
                     painter.setBrush(QColor(0, 0, 0, 128))  # Black with alpha 128 (out of 255)
-
                     rectWidth = self.topRight.x() - self.topLeft.x()
                     rectHeight = self.bottomLeft.y() - self.topLeft.y()
                     inner_rect = QRect(self.topLeft.x(), self.topLeft.y(), rectWidth, rectHeight)
                     painter.drawRect(inner_rect)
-
                     # Draw the outer region with higher opacity
                     painter.setOpacity(0.8) 
                     painter.setBrush(QColor(0, 0, 0, 230))  # Black with alpha 230 (out of 255)
-
                     # Create a path for the outer region with a hole in the middle
                     path = QPainterPath()
                     path.addRect(QRectF(new_pixmap.rect()))  # Convert QRect to QRectF
                     path.addRect(QRectF(inner_rect))  # Convert QRect to QRectF
                     painter.setClipPath(path)
-
                     painter.drawRect(new_pixmap.rect())
-                    
                     self.drawEdges(painter)
-
                     painter.end()
-
                     viewer.ftComponentLabel.setPixmap(new_pixmap)
                     parent = viewer.find_parent_window()
 
@@ -721,17 +664,13 @@ class ModernWindow(QMainWindow):
                     pixmapType = viewer.component_selector.currentText()
                     if pixmapType == "FT Magnitude":
                         original_pixmap = viewer.magnitudeImage 
-
                     elif pixmapType == "FT Phase":
                         original_pixmap = viewer.imageWidget.phaseImage
-
                     elif pixmapType == "FT Real":
                         original_pixmap = viewer.imageWidget.realImage
-
                     elif pixmapType == "FT Imaginary":
                         original_pixmap = viewer.imageWidget.imaginaryImage
 
-                    
                     if original_pixmap is None:
                         continue 
                     new_pixmap = original_pixmap.copy() 
@@ -740,39 +679,28 @@ class ModernWindow(QMainWindow):
                     painter.setOpacity(1) 
                     painter.setBrush(QColor(0, 0, 0, 200))  # Red with alpha 128 (out of 255)
 
-
                     rectWidth = self.topRight.x() - self.topLeft.x()
                     rectHeight = self.bottomLeft.y() - self.topLeft.y()
                     painter.drawRect(QRect(self.topLeft.x(), self.topLeft.y(), rectWidth, rectHeight))
-
                     self.drawEdges(painter)
                     painter.end()
-                    
                     viewer.ftComponentLabel.setPixmap(new_pixmap)
                     parent = viewer.find_parent_window()
         parent.schedule_real_time_mix()
-        
-
     
     def drawEdges(self, painter):
         # let's draw small solid rectangles at the corners of the rectangle
         painter.setOpacity(1)
-
         # Edges
         topLeft = QPoint(self.topLeft.x() - 5, self.topLeft.y() - 5)
         topRight = QPoint(self.topRight.x() - 5, self.topRight.y() - 5)
         bottomLeft = QPoint(self.bottomLeft.x() - 5, self.bottomLeft.y() - 5)
         bottomRight = QPoint(self.bottomRight.x() - 5, self.bottomRight.y() - 5)
-
-
         painter.setBrush(QColor(0, 0, 255, 255))  # Black with alpha 255 (out of 255)
         painter.drawRect(QRect(topLeft.x(), topLeft.y(), 10, 10))
         painter.drawRect(QRect(topRight.x(), topRight.y(), 10, 10))
         painter.drawRect(QRect(bottomLeft.x(), bottomLeft.y(), 10, 10))
         painter.drawRect(QRect(bottomRight.x(), bottomRight.y(), 10, 10))
-        
-
-
 
     def clear_rectangle(self, viewers):
         if not self.region_size.isChecked():
@@ -850,26 +778,21 @@ class ModernWindow(QMainWindow):
             import traceback
             traceback.print_exc()
 
-
-
     def toggleMaximized(self):
         if self.isMaximized():
             self.showNormal()
         else:
             self.showMaximized()
 
-
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.oldPos = event.globalPos()
-
 
     def mouseMoveEvent(self, event):
         if self.oldPos:
             delta = event.globalPos() - self.oldPos
             self.move(self.pos() + delta)
             self.oldPos = event.globalPos()
-
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -904,14 +827,12 @@ class ModernWindow(QMainWindow):
         QShortcut(QKeySequence("F11"), self, self.toggleMaximized)
         QShortcut(QKeySequence("Ctrl+R"), self, self.reset_all)
 
-
-
     def _setup_statusbar(self):
         self.statusBar = QStatusBar()
         self.statusBar.setStyleSheet(f"""
             QStatusBar {{
                 background: {COLORS['surface']};
-                color: {COLORS['text']};
+                color: {COLORS['text']}
                 border-top: 1px solid {COLORS['border']};
             }}
         """)
@@ -926,45 +847,10 @@ class ModernWindow(QMainWindow):
             output.reset()
         self.statusBar.showMessage("All viewers reset", 3000)
 
-    def _setup_menus(self):
-        self.context_menu = QMenu(self)
-        # File operations
-        #self.context_menu.addAction("Open Image...", self.open_image)
-        #self.context_menu.addAction("Save Result...", self.save_result)
-        self.context_menu.addSeparator()
-        # Edit operations
-        undo_action = QAction("Undo", self)
-        undo_action.setShortcut("Ctrl+Z")
-        undo_action.triggered.connect(self.undo)
-        self.context_menu.addAction(undo_action)
-        redo_action = QAction("Redo", self)
-        redo_action.setShortcut("Ctrl+Y")
-        redo_action.triggered.connect(self.redo)
-        self.context_menu.addAction(redo_action)
-
-    def contextMenuEvent(self, event):
-        self.context_menu.exec_(event.globalPos())
-
-    def undo(self):
-        if self.undo_stack:
-            state = self.undo_stack.pop()
-            self.redo_stack.append(state)
-            self.restore_state(state)
-            self.statusBar.showMessage("Undo successful", 2000)
-
-    def redo(self):
-        if self.redo_stack:
-            state = self.redo_stack.pop()
-            self.undo_stack.append(state)
-            self.restore_state(state)
-            self.statusBar.showMessage("Redo successful", 2000)
-        
-
 class MainController:
     def __init__(self, window):
         self.window = window
         self.current_thread = None
-
 
 class ImageViewerWidget(ModernWindow):
     weightChanged = pyqtSignal(float, str)
@@ -997,26 +883,16 @@ class ImageViewerWidget(ModernWindow):
         self.drawing = False
         self.start_point = None
         self.end_point = None
-
         # Initialize dragging flag and last position
         self.dragging = False
         self.last_pos = None
-
-
-
-
         self.build_ui(title)
-        self._setup_animations()
-
-
 
     def build_ui(self, title):
-        
         self.container = QWidget()
         layout = QVBoxLayout(self.container)
         self.setCentralWidget(self.container)
         layout.setContentsMargins(10, 10, 10, 10)
-        
         # Header with title
         header = QWidget()
         header_layout = QHBoxLayout(header)
@@ -1024,7 +900,6 @@ class ImageViewerWidget(ModernWindow):
         title_label = QLabel(title)
         header_layout.addWidget(title_label)
         layout.addWidget(header)
-
         if self.is_output:
             # Single display for output viewers
             self.originalImageLabel = ImageDisplay()
@@ -1039,7 +914,6 @@ class ImageViewerWidget(ModernWindow):
                 }
             """)
             layout.addWidget(self.originalImageLabel)
-            
         else:
             # Dual display for input viewers
             displays_layout = QHBoxLayout()
@@ -1056,12 +930,9 @@ class ImageViewerWidget(ModernWindow):
                 }
             """)
             self.originalImageLabel.on_double_click = self.apply_effect  # Connect double-click event
-            
             original_section.addWidget(original_label)
             original_section.addWidget(self.originalImageLabel)
             displays_layout.addLayout(original_section)
-
-
             # FT Component section (right)
             ft_section = QVBoxLayout()
             self.component_selector = QComboBox()
@@ -1071,9 +942,7 @@ class ImageViewerWidget(ModernWindow):
             ])
             self.component_selector.setToolTip("Select which Fourier component to view")
             self.component_selector.currentIndexChanged.connect(lambda: self.displayFrequencyComponent(self.component_selector.currentText()))
-
             ft_section.addWidget(self.component_selector)
-
             self.ftComponentLabel = ImageDisplay()
             self.ftComponentLabel.setAlignment(Qt.AlignCenter)
             self.ftComponentLabel.setMinimumSize(300, 300)
@@ -1087,9 +956,6 @@ class ImageViewerWidget(ModernWindow):
             ft_label = QLabel("Fourier Transform Component")
             ft_section.addWidget(ft_label)
             # Create a QGraphicsView overlay for the label
-            
-
-            
             ft_section.addWidget(self.ftComponentLabel)
             displays_layout.addLayout(ft_section)
             # Add displays layout to main layout
@@ -1120,19 +986,6 @@ class ImageViewerWidget(ModernWindow):
         layout.addWidget(self.progress)
 
 
-
-
-    def find_parent_window(self):
-        # Get the top-level window
-        parent = self.parentWidget()
-        while parent:
-            if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
-                return parent
-            parent = parent.parentWidget()
-        return None
-    
-
-
     def _on_slider_changed(self):
         # Find the parent ModernWindow instance
         parent = self
@@ -1142,8 +995,6 @@ class ImageViewerWidget(ModernWindow):
             # Schedule the real-time mix instead of calling it directly
             parent.schedule_real_time_mix()
     
-
-
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             if self.originalImageLabel.underMouse():
@@ -1155,20 +1006,14 @@ class ImageViewerWidget(ModernWindow):
                 print("You trying to adjust the rectangle")
                 self.dragging = True
                 # I need to current Position depending the self.ftComponentLabel not the ImageViewerWidget
-
-
                 global_pos = event.globalPos()
                 self.last_pos = self.ftComponentLabel.mapFromGlobal(global_pos)
-
                 print("The Last Position is: ", self.last_pos)
                 self.resizing_edge = None
-
-                
                 # I want to check the position of the mouse relative to the edges of the rectangle with a threshold of 3 pixels
                 margin = 10
                 if  (self.last_pos.x() - self.topLeft.x() ) <= margin and ( self.last_pos.y() - self.topLeft.y() ) <= margin:
                     self.resizing_edge = "topLeft"
-                
                 elif (self.last_pos.x() - self.topRight.x()) <= margin and (self.last_pos.y() - self.topRight.y()) <= margin:
                     self.resizing_edge = "topRight"
                 
@@ -1181,35 +1026,25 @@ class ImageViewerWidget(ModernWindow):
                 print("The Resizing Edge is: ", self.resizing_edge)
                 self.resizeRectangle()
                 
-                
-     
-
     def mouseMoveEvent(self, event):
         if self.dragging:
             if self.originalImageLabel.underMouse():
                 if self.last_pos is None:
                     self.last_pos = event.pos()
-
                 delta_x = event.pos().x() - self.last_pos.x()
                 delta_y = event.pos().y() - self.last_pos.y()
-
                 # Adjust brightness and contrast based on mouse movement
                 newImageData = self.adjust_brightness_contrast(delta_x / 10, delta_y / 10)
-
                 # Update last position for the next event
                 self.last_pos = event.pos()
-
                 # Process the adjusted image
                 self.imageFourierTransform(newImageData)
                 self.displayFrequencyComponent(self.component_selector.currentText())
-
 
             elif self.ftComponentLabel.underMouse():
                 parent = self.find_parent_window()
                 self.resizeRectangle()
                     
-
-
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1219,35 +1054,27 @@ class ImageViewerWidget(ModernWindow):
     def adjust_brightness_contrast(self, delta_x, delta_y):
         brightness_step = 0.2
         contrast_step = 0.2
-
         # X for contrast, Y for brightness
         self.brightness = np.clip(self.brightness + delta_y * brightness_step, -50, 200)
         self.contrast = np.clip(self.contrast + delta_x * contrast_step, 0.5, 2)
-
         print(f"Brightness: {self.brightness}, Contrast: {self.contrast}")
-
         if self.imageData is not None:
             print("Adjusting image brightness and contrast...")
-
             # Apply contrast and brightness adjustments
             adjusted_image = cv2.convertScaleAbs(self.imageData, alpha=self.contrast, beta=self.brightness)
             adjusted_image = np.clip(adjusted_image, 0, 255).astype(np.uint8)
-
             # Convert NumPy array back to QImage
             height, width, channel = adjusted_image.shape
             bytes_per_line = 3 * width
             q_image = QImage(adjusted_image.data, width, height, bytes_per_line, QImage.Format_RGB888)
-
             # Convert to grayscale if needed (optional step, remove if not desired)
             q_image = q_image.convertToFormat(QImage.Format_Grayscale8)
-
             # Update QLabel display
             pixmap_image = QPixmap.fromImage(q_image)
             label_width = self.originalImageLabel.width()
             label_height = self.originalImageLabel.height()
             pixmap_image = pixmap_image.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.originalImageLabel.setPixmap(pixmap_image)
-
             return adjusted_image
 
     def resizeRectangle(self):
@@ -1256,9 +1083,7 @@ class ImageViewerWidget(ModernWindow):
             # Get the current Position
             global_pos = QCursor.pos()
             current_pos = self.ftComponentLabel.mapFromGlobal(global_pos)
-            
             if self.resizing_edge == "topLeft":
-                # We need to change the value of topRight and bottomLeft
                 if current_pos.x() >= self.topRight.x() - 30 or current_pos.y() >= self.bottomLeft.y() - 30:
                     return
                 self.topLeft = current_pos
@@ -1268,8 +1093,6 @@ class ImageViewerWidget(ModernWindow):
             elif self.resizing_edge == "topRight":
                 if current_pos.x() <= self.topLeft.x() + 30 or current_pos.y() >= self.bottomRight.y() - 30:
                     return
-                
-                # We need to change the value of topLeft and bottomRight
                 self.topRight = current_pos
                 self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
                 self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
@@ -1277,7 +1100,6 @@ class ImageViewerWidget(ModernWindow):
             elif self.resizing_edge == "bottomLeft":
                 if current_pos.x() >= self.bottomRight.x() - 30 or current_pos.y() <= self.topLeft.y() + 30:
                     return
-                # We need to change the value of topLeft and bottomRight
                 self.bottomLeft = current_pos
                 self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
                 self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
@@ -1285,7 +1107,6 @@ class ImageViewerWidget(ModernWindow):
             elif self.resizing_edge == "bottomRight":
                 if current_pos.x() <= self.bottomLeft.x() + 30 or current_pos.y() <= self.topRight.y() + 30:
                     return
-                # We need to change the value of topRight and bottomLeft
                 self.bottomRight = current_pos
                 self.topRight = QPoint(self.bottomRight.x(), self.topLeft.y())
                 self.bottomLeft = QPoint(self.topLeft.x(), self.bottomRight.y())
@@ -1295,7 +1116,6 @@ class ImageViewerWidget(ModernWindow):
             parent.topRight = self.topRight
             parent.bottomLeft = self.bottomLeft
             parent.bottomRight = self.bottomRight
-
             self.draw_rectangle(parent.viewers, parent.region)
 
     def loadImage(self, parent):
@@ -1320,185 +1140,133 @@ class ImageViewerWidget(ModernWindow):
                     parent.minimumSize = (row, column)
                     print(parent.minimumSize)
 
-                #cv2.resize(grayScaledImage, (column,row))
-                #self.unify_images(parent.viewers, parent.minimumSize)
+                parent = self.find_parent_window()
+                #cv2.resize(grayScaledImage, (column,row))F
+                #parent.unify_images(parent.minimumSize)
+
                 self.imageData = cv2.resize(self.imageData, (600,600))
-            
                 return grayScaledImage, self.imageData
             
             return 
         except Exception as e:
             print(f"Error: {e}")
 
+    # ------------------------------------------------------------- Getters and Setters ------------------------------------------------------------ #
+    def get_component_data(self, component):
+        if component == "magnitude":
+            return self.ftMagnitudes
+        elif component == "phase":
+            return self.ftPhase
+        elif component == "real":
+            return self.ftReal
+        else:
+            return self.ftImaginary
+        
+    def set_component_data(self, component, value):
+        if component == "magnitude":
+            self.ftMagnitudes = value
+        elif component == "phase":
+            self.ftPhase = value
+        elif component == "real":
+            self.ftReal = value
+        else:
+            self.ftImaginary = value
 
+    def find_parent_window(self):
+        # Get the top-level window
+        parent = self.parentWidget()
+        while parent:
+            if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
+                return parent
+            parent = parent.parentWidget()
+        return None
+    
+    def get_image_data(self):
+        return self.imageData
 
-    def unify_images(self, viewers, minimumSize):
-        print("Unifying Images")
-        for viewer in viewers:
-            if viewer.imageData is not None:
-                # Resize the image using cv2.resize
-                target_row, target_column = minimumSize  # Assuming square resizing
-                viewer.imageData = cv2.resize(viewer.imageData, (target_column, target_row))
-                print(f"Image resized to: {viewer.imageData.shape}")
-                self.imageFourierTransform(viewer.imageData)
-
-
+    # ------------------------------------------------------------- Frequency Label Functions ------------------------------------------------------ #
     def imageFourierTransform(self, imageData):
-        width, height = self.qImage.width() , self.qImage.height()
-        ptr = self.qImage.bits()
-        ptr.setsize(width * height)
-        newImageData = np.frombuffer(ptr , np.uint8).reshape((height, width))
-        print(newImageData)
-
         fftComponents = np.fft.fft2(imageData)
         fftComponentsShifted = np.fft.fftshift(fftComponents)
         self.fftComponents= fftComponents
-        # Get Magnitude and Phase
-        self.ftMagnitudes = np.abs(self.fftComponents)
-        self.ftPhase = np.angle(self.fftComponents)
-        # Get the Real and Imaginary parts
-        self.ftReal = np.real(self.fftComponents)
-        self.ftImaginary = np.imag(self.fftComponents)
+        self.set_component_data("magnitude", np.abs(self.fftComponents))
+        self.set_component_data("phase" , np.angle(self.fftComponents))
+        self.set_component_data("real", np.real(self.fftComponents))
+        self.set_component_data("imaginary", np.imag(self.fftComponents))
 
-
-    def displayFrequencyComponent(self, PlottedComponent):
-        # Chnage all Selectors to the current component
-    
+    def displayFrequencyComponent(self, PlottedComponent):    
         if PlottedComponent == "FT Magnitude":
             # Take the Magnitude as log scale
-
             #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-            ftMagnitudes = self.ftMagnitudes
+            ftMagnitudes = self.get_component_data("magnitude")
             ftLog = 15 * np.log(ftMagnitudes)
             ftNormalized = cv2.normalize(ftLog , None , 0, 255 , cv2.NORM_MINMAX).astype(np.uint8)
-            
             pil_image = Image.fromarray(np.uint8(ftLog)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
             qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
-            label_height = self.ftComponentLabel.height()
-            label_width = self.ftComponentLabel.width()
-            
             pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.magnitudeImage = pixmap
             self.ftComponentLabel.setPixmap(pixmap)
-            
-
         elif PlottedComponent == "FT Phase":
             # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
             #ftPhases = np.fft.fftshift(self.ftPhase)
-            ftPhases = self.ftPhase
-
+            ftPhases = self.get_component_data("phase")
             f_wrapped = np.angle(np.exp(1j * ftPhases))  
             f_normalized = (f_wrapped + np.pi) / (2 * np.pi) * 255
-            
             pil_image = Image.fromarray(np.uint8(f_normalized)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
             qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
-            label_height = self.ftComponentLabel.height()
-            label_width = self.ftComponentLabel.width()
-            
             pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.phaseImage = pixmap
-            
             self.ftComponentLabel.setPixmap(pixmap)
-        
         elif PlottedComponent == "FT Real":
-            
             # Normalization and Adjustment for visualization
-            
             #ftReals = np.fft.fftshift(self.ftReal)
-            ftReals = self.ftReal
+            ftReals = self.get_component_data("real")
             ftNormalized = np.abs(ftReals)
-            
-            
             pil_image = Image.fromarray(np.uint8(ftNormalized)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
             qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
-            label_height = self.ftComponentLabel.height()
-            label_width = self.ftComponentLabel.width()
-            
             pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.realImage = pixmap
-            
             self.ftComponentLabel.setPixmap(pixmap)
-        
         elif PlottedComponent == "FT Imaginary":
-            
             #ftImaginaries = np.fft.fftshift(self.ftImaginary)
-            ftImaginaries = self.ftImaginary
+            ftImaginaries = self.get_component_data("imaginary")
             ftNormalized = np.abs(ftImaginaries)
-            
-            
             pil_image = Image.fromarray(np.uint8(ftNormalized)) 
             qimage = self.convert_from_pil_to_qimage(pil_image)
-            
             qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
             pixmap = QPixmap.fromImage(qimage)
-            label_height = self.ftComponentLabel.height()
-            label_width = self.ftComponentLabel.width()
-            
             pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.imaginaryImage = pixmap
             self.ftComponentLabel.setPixmap(pixmap)
-        
-        
+
         parent = self.find_parent_window()
         parent.real_time_mix()
         if parent.region_size.isChecked():
             parent.draw_rectangle( parent.viewers ,parent.region)
-
-
-
-
 
     def convert_from_pil_to_qimage(self, pilImage):
             img_data = pilImage.tobytes()
             qimage = QImage(img_data, pilImage.width, pilImage.height, pilImage.width * 3, QImage.Format_RGB888)
             return qimage
 
-
-    
-    def _setup_zoom_controls(self):
-        zoom_layout = QHBoxLayout()
-        
-        zoom_out = QPushButton("-")
-        zoom_out.setFixedSize(24, 24)
-        zoom_out.clicked.connect(partial(self.adjust_zoom, -0.1))
-        
-        self.zoom_label = QLabel("100%")
-        self.zoom_label.setFixedWidth(50)
-        
-        zoom_in = QPushButton("+")
-        zoom_in.setFixedSize(24, 24)
-        zoom_in.clicked.connect(partial(self.adjust_zoom, 0.1))
-        
-        zoom_layout.addWidget(zoom_out)
-        zoom_layout.addWidget(self.zoom_label)
-        zoom_layout.addWidget(zoom_in)
-        
-        self.container.layout().addLayout(zoom_layout)
-
-
     def convert_data_to_image(self, imageData):
         try:
-            # Convert the image data to a QImage
             height, width, channel = imageData.shape
             bytesPerLine = 3 * width
             qImg = QtGui.QImage(imageData.data, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
             if qImg is None:
                 print("Error in converting image data to QImage")
-        
             qImg = qImg.rgbSwapped()
             grayscale_qImg = qImg.convertToFormat(QtGui.QImage.Format_Grayscale8)
-            
             return grayscale_qImg
         except Exception as e:
             print(e)
-
-
 
     def apply_effect(self):
         try:            
@@ -1512,8 +1280,6 @@ class ImageViewerWidget(ModernWindow):
                 raise Exception("Failed to load image")
             print("Image Loaded")
             logging.info("Loading an Image.")
-
-            
             # Display original image
             pixmapImage = QPixmap.fromImage(self.qImage)
             label_height = int(self.originalImageLabel.height())
@@ -1524,11 +1290,9 @@ class ImageViewerWidget(ModernWindow):
                 aspectRatioMode=Qt.AspectRatioMode.IgnoreAspectRatio
             )
             self.originalImageLabel.setPixmap(pixmapImage)
-            
             self.imageFourierTransform(self.imageData)                
             self.displayFrequencyComponent("FT Magnitude")
             parent.real_time_mix()
-            
 
         except Exception as e:
             print(f"Error in apply_effect: {str(e)}")
@@ -1536,82 +1300,6 @@ class ImageViewerWidget(ModernWindow):
                 self.window.show_error(str(e))
         finally:
             self.originalImageLabel.hideLoadingSpinner()
-
-
-    def _setup_animations(self):
-        self.highlight_animation = QPropertyAnimation(self, b"styleSheet")
-        self.highlight_animation.setDuration(300)
-        self.highlight_animation.setEasingCurve(QEasingCurve.InOutQuad)
-
-    def highlight(self):
-        self.highlight_animation.setStartValue(f"""
-            QFrame#imageViewer {{
-                background: {COLORS['background']};
-                border: 1px solid {COLORS['border']};
-            }}
-        """)
-        self.highlight_animation.setEndValue(f"""
-            QFrame#imageViewer {{
-                background: {COLORS['surface']};
-                border: 1px solid {COLORS['primary']};
-            }}
-        """)
-        self.highlight_animation.start()
-
-    def reset(self):
-        self.image = None
-        self.ft_components = None
-        self.ft_magnitude = None
-        self.ft_phase = None
-        self.ft_real = None
-        self.ft_imaginary = None
-        self.brightness = 0
-        self.contrast = 1
-        self.originalImageLabel.clear()
-        if not self.is_output:
-            self.ftComponentLabel.clear()
-            self.weight1_slider.setValue(50)
-
-    def _setup_zoom_controls(self):
-        zoom_layout = QHBoxLayout()
-        
-        zoom_out = QPushButton("-")
-        zoom_out.setFixedSize(24, 24)
-        zoom_out.clicked.connect(partial(self.adjust_zoom, -0.1))
-        
-        self.zoom_label = QLabel("100%")
-        self.zoom_label.setFixedWidth(50)
-        
-        zoom_in = QPushButton("+")
-        zoom_in.setFixedSize(24, 24)
-        zoom_in.clicked.connect(partial(self.adjust_zoom, 0.1))
-        
-        zoom_layout.addWidget(zoom_out)
-        zoom_layout.addWidget(self.zoom_label)
-        zoom_layout.addWidget(zoom_in)
-        
-        self.layout().addLayout(zoom_layout)
-
-    def adjust_zoom(self, delta):
-        self.zoom_level = max(0.1, min(5.0, self.zoom_level + delta))
-        self.zoom_label.setText(f"{int(self.zoom_level * 100)}%")
-        self.update_display()
-
-    def wheelEvent(self, event):
-        if event.modifiers() == Qt.ControlModifier:
-            delta = event.angleDelta().y() / 1200
-            self.adjust_zoom(delta)
-            event.accept()
-        else:
-            super().wheelEvent(event)
-
-    def update_display(self):
-        if self.image:
-            scaled_size = self.image.size() * self.zoom_level
-            self.originalImageLabel.setPixmap(self.image.scaled(
-                scaled_size.toSize(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
-
-  
 
 
 if __name__ == '__main__':
