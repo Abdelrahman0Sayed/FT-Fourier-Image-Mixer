@@ -37,9 +37,7 @@ COLORS.update({
     'warning': '#FFA726',
     'info': '#29B6F6'
 })
-
 class ModernWindow(QMainWindow):
-
     def __init__(self, imageWidget=None , skip_setup_ui=False):
         super().__init__() 
         self.skip_setup_ui = skip_setup_ui  
@@ -174,14 +172,9 @@ class ModernWindow(QMainWindow):
 
     def _setup_connection(self):
         print("Setting up connections")
-        # Use direct method connection instead of lambda
-        #self.mix_button.clicked.connect(self.on_mix_button_clicked)
 
     def _finish_mixing(self):
         self.is_mixing = False
-        #self.mix_button.setEnabled(True)
-        #self.mix_progress.hide()
-
 
     def real_time_mix(self):
         try:
@@ -199,24 +192,17 @@ class ModernWindow(QMainWindow):
                     ftComponents = []
                     if True:
                         if self.inner_region.isChecked():
-                            print("Mixing Ineer Data")
-                            data_percentage = self.rectSize / 300
-                            # Create zero array same size as shifted input
                             ftComponents = np.zeros_like(viewer.fftComponents)
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2 
-                            print("Length of x Data")
                             start_x, end_x = center_x , center_x
                             start_y, end_y = center_y , center_y
                             if self.region_size.isChecked():
-                                print("We are using ROF")
                                 start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
                                 end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
-
                                 start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
                                 end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
 
-                            # Copy only inner region from shifted data, rest remains zero
                             ftComponents[
                                 max(0, center_x - start_x) : min(center_x + end_x , viewer.fftComponents.shape[0]),
                                 max(0,center_y - start_y) : min(center_y + end_y , viewer.fftComponents.shape[1]) 
@@ -226,20 +212,16 @@ class ModernWindow(QMainWindow):
                             ]
 
                         else:
-                            data_percentage = self.rectSize / 300  # Calculate the data percentage
-                            ftComponents = np.copy(viewer.fftComponents)  # Make a copy of the FFT components
+                            ftComponents = np.copy(viewer.fftComponents) 
                             center_x = viewer.fftComponents.shape[0] // 2
                             center_y = viewer.fftComponents.shape[1] // 2
                             start_x, end_x = center_x , center_x
                             start_y, end_y = center_y , center_y
                             if self.region_size.isChecked():
-                                print("We are using ROF")
                                 start_x = int(( (150 - self.topLeft.x()) / 150 ) * center_x)  
                                 end_x = int(( (self.bottomRight.x() - 150) / 150 ) * center_x)  
-
                                 start_y = int(( (150 - self.topLeft.y()) / 150 ) * center_x)  
                                 end_y = int(( (self.bottomRight.y() - 150) / 150 ) * center_x)  
-
                             # Zero out the desired region using slicing
                             ftComponents[center_x - start_x: center_x + end_x, 
                                          center_y - start_y: center_y + end_y] = 0
@@ -248,49 +230,37 @@ class ModernWindow(QMainWindow):
                     components.append({
                         'ft': ftComponents.copy(),
                         'weight': weight,
-                        'type': viewer.component_selector.currentText()
+                        'type': viewer.component_selector.currentText() # To Just access the component data chosen by the Combo Box
                     })
                     #self.mix_progress.setValue(20 + (i * 15))
                     QApplication.processEvents()
 
             if not components:
                 return
-
             QApplication.processEvents()
-
-            # Get mixing type and perform mix
             mix_type = self.mix_type.currentText()
             if mix_type == "Magnitude/Phase":
                 result = self.mix_magnitude_phase(components)
             else:
                 result = self.mix_real_imaginary(components)
-
-            #self.mix_progress.setValue(80)
             QApplication.processEvents()
-
             # Process result
             mixed_image = np.fft.ifft2(result)
             mixed_image = np.abs(mixed_image)
             mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
             mixed_image = mixed_image.astype(np.uint8)
-
-            #self.mix_progress.setValue(90)
             output_index = self.output_selector.currentIndex()
             output_viewer = self.outputViewers[output_index]
             if not output_viewer or not output_viewer.originalImageLabel:
                 return
             QApplication.processEvents()
-
             # Update display
             height, width, channel = mixed_image.shape
             bytesPerLine = 3 * width
-            
             # Convert memoryview to bytes
             image_bytes = mixed_image.tobytes()
-            
             # Create the QImage
             qImg = QtGui.QImage(image_bytes, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
-            
             if qImg.isNull():  # Check if the QImage is valid
                 print("Error in converting image data to QImage")
             else:
@@ -303,9 +273,7 @@ class ModernWindow(QMainWindow):
                 pixmap = QPixmap.fromImage(qImage)
                 output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.IgnoreAspectRatio))
 
-            #self.mix_progress.setValue(100)
             QApplication.processEvents()
-
         except Exception as e:
             print(f"Error during real-time mixing: {str(e)}")
             if hasattr(self, 'show_error'):
@@ -314,11 +282,8 @@ class ModernWindow(QMainWindow):
             # Don't hide immediately to show completion
             QTimer.singleShot(500, lambda: self._finish_mixing())
             
-
     def mix_magnitude_phase(self, components):
-
         try:
-            print("Start Mixing")
             first_ft = components[0]['ft']
             result = np.zeros_like(first_ft, dtype=complex)
             print(1)
@@ -335,8 +300,6 @@ class ModernWindow(QMainWindow):
                 total_magnitude += weight * magnitude
             print("Magnitude Done")
             
-            print(2)
-            # Mix phases
             total_phase = np.zeros_like(np.angle(first_ft))
             for comp in components:
                 weight = comp['weight']
@@ -347,25 +310,18 @@ class ModernWindow(QMainWindow):
                 else:
                     phase = 0
                 total_phase += weight * phase
-            print("Phase Done")
 
-            # Combine magnitude and phase
             result = total_magnitude * np.exp(1j * total_phase)
-            print("Mixing Done")
-
             return result
             
         except Exception as e:
             print(f"Error in magnitude/phase mixing: {str(e)}")
             raise
 
-
     def mix_real_imaginary(self, components):
         try:
             first_ft = components[0]['ft']
             result = np.zeros_like(first_ft, dtype=complex)
-            
-            # Mix real parts
             for comp in components:
                 weight = comp['weight']
                 type = comp['type']
@@ -375,7 +331,6 @@ class ModernWindow(QMainWindow):
                     real = 0
                 result.real += weight * comp['ft'].real
             
-            # Mix imaginary parts
             for comp in components:
                 weight = comp['weight']
                 type = comp['type']
@@ -390,8 +345,6 @@ class ModernWindow(QMainWindow):
         except Exception as e:
             print(f"Error in real/imaginary mixing: {str(e)}")
             raise
-
-
 
     def buildUI(self):
         # Main container
@@ -572,7 +525,6 @@ class ModernWindow(QMainWindow):
         self.setCentralWidget(self.container)
         self._setup_connection()
 
-
     def unify_images(self, minimumSize):
         for viewer in self.viewers:
             imageData = viewer.get_image_data()
@@ -583,10 +535,7 @@ class ModernWindow(QMainWindow):
                 print(f"Image resized to: {viewer.imageData.shape}")
                 self.imageFourierTransform(viewer.imageData)
 
-
     def start_loading(self):
-        #self.mix_progress.show()  # Show the progress bar
-        #self.mix_progress.setValue(0)  # Reset to 0
         self.timer.start(100)  # Set timer interval in milliseconds (e.g., 100 ms)
 
     def update_progress(self):
@@ -609,7 +558,6 @@ class ModernWindow(QMainWindow):
         self.bottomLeft = QPoint(75, 225)
         self.bottomRight = QPoint(225, 225)
         self.threshold = QPoint(3, 3)
-        
         for viewer in viewers:
             viewer.topLeft = QPoint(75, 75)
             viewer.topRight = QPoint(225, 75)
@@ -674,11 +622,9 @@ class ModernWindow(QMainWindow):
                     if original_pixmap is None:
                         continue 
                     new_pixmap = original_pixmap.copy() 
-                    
                     painter = QPainter(new_pixmap)
                     painter.setOpacity(1) 
                     painter.setBrush(QColor(0, 0, 0, 200))  # Red with alpha 128 (out of 255)
-
                     rectWidth = self.topRight.x() - self.topLeft.x()
                     rectHeight = self.bottomLeft.y() - self.topLeft.y()
                     painter.drawRect(QRect(self.topLeft.x(), self.topLeft.y(), rectWidth, rectHeight))
@@ -708,19 +654,14 @@ class ModernWindow(QMainWindow):
                 pixmapType = viewer.component_selector.currentText()
                 if pixmapType == "FT Magnitude":
                     original_pixmap = viewer.magnitudeImage 
-
                 elif pixmapType == "FT Phase":
                     original_pixmap = viewer.imageWidget.phaseImage
-
                 elif pixmapType == "FT Real":
                     original_pixmap = viewer.imageWidget.realImage
-
                 elif pixmapType == "FT Imaginary":
                     original_pixmap = viewer.imageWidget.imaginaryImage
-
                 if original_pixmap is None:
                     continue 
-
                 new_pixmap = original_pixmap.copy() 
                 viewer.ftComponentLabel.setPixmap(new_pixmap)
             self.real_time_mix()
@@ -1089,21 +1030,18 @@ class ImageViewerWidget(ModernWindow):
                 self.topLeft = current_pos
                 self.topRight = QPoint(self.bottomRight.x(), self.topLeft.y())
                 self.bottomLeft = QPoint(self.topLeft.x(), self.bottomRight.y())
-
             elif self.resizing_edge == "topRight":
                 if current_pos.x() <= self.topLeft.x() + 30 or current_pos.y() >= self.bottomRight.y() - 30:
                     return
                 self.topRight = current_pos
                 self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
                 self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
-
             elif self.resizing_edge == "bottomLeft":
                 if current_pos.x() >= self.bottomRight.x() - 30 or current_pos.y() <= self.topLeft.y() + 30:
                     return
                 self.bottomLeft = current_pos
                 self.topLeft = QPoint(self.bottomLeft.x(), self.topRight.y())
                 self.bottomRight = QPoint(self.topRight.x(), self.bottomLeft.y())
-
             elif self.resizing_edge == "bottomRight":
                 if current_pos.x() <= self.bottomLeft.x() + 30 or current_pos.y() <= self.topRight.y() + 30:
                     return
@@ -1124,10 +1062,8 @@ class ImageViewerWidget(ModernWindow):
             if filePath:
                 # Load the image
                 self.imageData = cv2.imread(filePath)
-                
                 # Convert to grayscale
                 grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
-                
                 row, column = grayScaledImage.shape
                 print(row, column)
                 print(parent.minimumSize)
@@ -1135,7 +1071,6 @@ class ImageViewerWidget(ModernWindow):
                 # This means that's the first image 
                 if parent.minimumSize == (0, 0):
                     parent.minimumSize = (row, column)
-
                 if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
                     parent.minimumSize = (row, column)
                     print(parent.minimumSize)
@@ -1300,7 +1235,6 @@ class ImageViewerWidget(ModernWindow):
                 self.window.show_error(str(e))
         finally:
             self.originalImageLabel.hideLoadingSpinner()
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
