@@ -142,7 +142,7 @@ class ScenarioManager:
                     "name": "Ultrasound Probe",
                     "num_elements": 20,
                     "element_spacing": 0.25,
-                    "steering_angle": 0,
+                    "steering_angle": 35,
                     "geometry_type": "Curved",
                     "curvature_factor": 1.5,
                     "operating_freqs": [5],
