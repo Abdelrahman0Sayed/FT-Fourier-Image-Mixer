@@ -31,114 +31,100 @@ class BasePlot(ABC):
         self.figure.clear()
     
 class PatternPlot(BasePlot):
-    def update(self, theta, pattern, steering_angles, show_full_pattern=False):
-        # Input validation
+    def _show_beam_metrics(self, ax, theta, pattern_db):
+        """Calculate and display beam pattern metrics."""
+        # Find main lobe peak
+        peak_idx = np.argmax(pattern_db)
+        peak_angle = np.degrees(theta[peak_idx])
         
+        # Calculate -3dB beam width
+        beam_width = self._calculate_beam_width(theta, pattern_db)
+        
+        # Add annotations
+        text_props = dict(color='white', fontsize=10, transform=ax.transAxes)
+        ax.text(1.2, 0.95, f'Peak: {peak_angle:.1f}°', **text_props)
+        ax.text(1.2, 0.90, f'Beam Width: {beam_width:.1f}°', **text_props)
+
+    def _calculate_beam_width(self, theta, pattern_db):
+        """Calculate -3dB beam width."""
+        mask = pattern_db >= -3
+        if not np.any(mask):
+            return 0
+        crossing_points = np.where(np.diff(mask))[0]
+        if len(crossing_points) >= 2:
+            return abs(np.degrees(theta[crossing_points[1]] - theta[crossing_points[0]]))
+        return 0
+
+    def update(self, theta, pattern, steering_angles, show_full_pattern=False):
+        """Update the beam pattern visualization."""
         if pattern is None or len(pattern) == 0 or theta is None:
             print("Invalid pattern or theta data")
             self.clear()
             return
-        
 
-        print(f'show_full_pattern: {show_full_pattern}')
-        if show_full_pattern:
-            # Create full 360° pattern
-            theta_full = np.linspace(0, 2*np.pi, len(theta)*2)
-            pattern_full = np.concatenate([pattern, np.flip(pattern)])
-            theta = theta_full
-            pattern = pattern_full
-            
-        print(f"Input stats:")
-        print(f"- Pattern shape: {pattern.shape}")
-        print(f"- Pattern values: {pattern[:5]}...")  # Debug first few values
-        print(f"- Pattern unique values: {len(np.unique(pattern))}")
-        
-        # Complex pattern processing
-        pattern_mag = np.abs(pattern)
-        pattern_db = 20 * np.log10(np.clip(pattern_mag, 1e-10, np.max(pattern_mag)))
-        pattern_db = np.clip(pattern_db, -40, 0)
-        plot_pattern = pattern_db + 40
-        
-        print(f"Pattern processing:")
-        print(f"- dB range: [{np.min(pattern_db):.1f}, {np.max(pattern_db):.1f}]")
-        
-        # Setup plot
+        # 1. Setup polar plot
         self.figure.clear()
         ax = self.figure.add_subplot(111, projection='polar')
-        ax.set_theta_zero_location('N')  # Set 0° at top
-        ax.set_theta_direction(-1)       # Counterclockwise rotation
-        
-        # Define masks with better thresholds
-        main_lobe_threshold = -3  # -3dB point
-        side_lobe_threshold = -20
-        
-        main_lobe_mask = pattern_db >= main_lobe_threshold
-        side_lobe_mask = (pattern_db < main_lobe_threshold) & (pattern_db >= side_lobe_threshold)
+        ax.set_theta_zero_location('N')
+        ax.set_theta_direction(-1)
 
-        # Base pattern plot
-        ax.plot(theta, plot_pattern, 'w-', alpha=0.3, zorder=1, linewidth=1)
+        # 2. Process pattern based on full/half view
+        if show_full_pattern:
+            theta_full = np.concatenate([theta, theta + np.pi])
+            pattern_full = np.concatenate([pattern, pattern])
+            theta = theta_full
+            pattern = pattern_full
 
-        # Fill patterns with proper order
-        if np.any(main_lobe_mask):
-            ax.fill_between(theta, 0, plot_pattern,
-                          where=main_lobe_mask,
-                          color='#2196f3', alpha=0.6,
-                          label='Main Lobe',
-                          zorder=3)
+        # 3. Convert to dB scale
+        pattern_db = 20 * np.log10(np.clip(np.abs(pattern), 1e-10, None))
+        pattern_db = np.clip(pattern_db, -40, 0)
+        normalized_pattern = pattern_db + 40
 
-        if np.any(side_lobe_mask):
-            ax.fill_between(theta, 0, plot_pattern,
-                          where=side_lobe_mask,
-                          color='#ff9800', alpha=0.4,
-                          label='Side Lobes',
-                          zorder=2)
+        # 4. Create masks for lobes
+        main_lobe_mask = pattern_db >= -3
+        side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
 
-        # Steering angles
+        # 5. Plot patterns
+        ax.fill_between(theta, 0, normalized_pattern,
+                        where=main_lobe_mask,
+                        color='#2196f3', alpha=0.3,
+                        label='Main Lobe (-3dB)')
+        ax.fill_between(theta, 0, normalized_pattern,
+                        where=side_lobe_mask,
+                        color='#ff9800', alpha=0.2,
+                        label='Side Lobes')
+
+        # 7. Configure angle markers
+        angles = np.arange(90, 450, 15)
+        ax.set_xticks(np.radians(angles % 360))
+        ax.set_xticklabels([''] * len(angles))
+
+        # 8. Add steering angle indicators
         if steering_angles:
             for angle in steering_angles:
                 if angle != 0:
                     angle_rad = np.radians(angle)
                     ax.plot([angle_rad, angle_rad], [0, 40],
-                           color='#ff5722', linestyle='--',
-                           linewidth=1.5, alpha=0.7,
-                           label=f'Steering {angle}°',
-                           zorder=4)
+                        color='#ff5722', linestyle='--',
+                        linewidth=1.5, alpha=0.7,
+                        label=f'Steering {angle}°')
 
-        # Grid and styling
-        ax.grid(True, color='white', alpha=0.2, linestyle=':')
-        
-        # Angle labels
-        angles = np.arange(0, 360, 15)
-        ax.set_xticks(np.radians(angles))
-        ax.set_xticklabels([f'{int(ang)}°' for ang in angles],
-                        fontsize=8, color=self.config.text_color)
-        
-        # Magnitude labels  
-        
-        
-        # Enhanced magnitude labels
-        ax.set_yticks(np.linspace(0, 40, 5))
-        magnitude_labels = [f'{int(db):d}' for db in np.linspace(-40, 0, 5)]
-        ax.set_yticklabels(magnitude_labels, color=self.config.text_color)
-        
-        # Final styling
+        # 9. Final styling
+        ax.grid(True, color='white', alpha=0.1, linestyle=':')
         ax.set_ylim(0, 45)
         ax.set_title('Beam Pattern Analysis',
                     color=self.config.text_color,
                     pad=20, fontsize=14, fontweight='bold')
         
-        # Legend
-        
-        
-        # Legend with better positioning
+        # 10. Configure legend
         ax.legend(loc='upper right',
-                 bbox_to_anchor=(1.2, 1.1),
-                 facecolor='#2d2d2d',
-                 edgecolor='none',
-                 labelcolor=self.config.text_color)
-        
+                bbox_to_anchor=(1.2, 1.1),
+                facecolor='#2d2d2d',
+                edgecolor='none',
+                labelcolor=self.config.text_color)
+
         self.figure.tight_layout()
-        
+            
 
 class InterferencePlot(BasePlot):
     def update(self, x, y, interference):
