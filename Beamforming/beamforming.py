@@ -930,7 +930,7 @@ class BeamformingSimulator(QMainWindow):
 
     def setup_preset_scenarios(self):
         self.scenarios = {
-                        ScenarioType.FiveG: {
+            ScenarioType.FiveG: {
                 "description": "5G Beamforming Array (28 GHz)",
                 "params": {
                     "units": [
@@ -956,14 +956,13 @@ class BeamformingSimulator(QMainWindow):
                         {
                             "name": "Ultrasound Probe",
                             "num_elements": 16,
-                            "element_spacing": .06,
+                            "element_spacing": 0.06,
                             "steering_angle": 0,
+                            "geometry_type": "Linear", 
                             "curvature_factor": 1.5,
                             "operating_freqs": [0.5],
-                            "geometry_type": "Curved",
                             "x_pos": 0,
-                            "y_pos": 0,
-                            
+                            "y_pos": 0 
                         }
                     ]
                 }
@@ -973,7 +972,7 @@ class BeamformingSimulator(QMainWindow):
                 "params": {
                     "units": [
                         {
-                            "name": "Ultrasound Probe",
+                            "name": "Tumor Ablation Array",
                             "num_elements": 20,
                             "element_spacing": 0.25,
                             "steering_angle": 0,

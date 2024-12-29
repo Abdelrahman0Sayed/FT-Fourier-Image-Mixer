@@ -1298,9 +1298,6 @@ class ImageViewerWidget(ModernWindow):
 
             self.draw_rectangle(parent.viewers, parent.region)
 
-
-
-
     def loadImage(self, parent):
         try:
             filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
@@ -1362,8 +1359,6 @@ class ImageViewerWidget(ModernWindow):
         # Get the Real and Imaginary parts
         self.ftReal = np.real(self.fftComponents)
         self.ftImaginary = np.imag(self.fftComponents)
-        
-
 
 
     def displayFrequencyComponent(self, PlottedComponent):
@@ -1389,13 +1384,8 @@ class ImageViewerWidget(ModernWindow):
             self.ftComponentLabel.setPixmap(pixmap)
             
 
-
-
-
         elif PlottedComponent == "FT Phase":
             # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
-            
-            
             #ftPhases = np.fft.fftshift(self.ftPhase)
             ftPhases = self.ftPhase
 
