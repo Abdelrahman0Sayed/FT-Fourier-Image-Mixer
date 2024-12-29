@@ -1,3 +1,4 @@
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import numpy as np
@@ -13,7 +14,7 @@ class FieldCalculator:
         self.x_field = x_field
         self.y_field = y_field
         self.X, self.Y = np.meshgrid(x_field, y_field)
-    
+
     def calculate_array_geometry(self, unit):
         """Calculate element positions based on array geometry."""
         if unit.geometry_type == "Linear":
@@ -150,9 +151,9 @@ class FieldCalculator:
             return X_calc, Y_calc
 
     def _add_frequency_interference(self, unit: 'ArrayUnit', field: np.ndarray,
-                          freq: float, highest_freq: float, element_x: np.ndarray,
-                          element_y: np.ndarray, X_calc: np.ndarray,
-                          Y_calc: np.ndarray, steer_angle: float) -> None:
+                              freq: float, highest_freq: float, element_x: np.ndarray,
+                              element_y: np.ndarray, X_calc: np.ndarray,
+                              Y_calc: np.ndarray, steer_angle: float) -> None:
         norm_freq = freq/highest_freq
         k = 2 * np.pi * norm_freq
         wavelength = 1/freq
@@ -160,43 +161,26 @@ class FieldCalculator:
         array_length = unit.num_elements * unit.element_spacing
         transition = 2 * array_length**2 / wavelength
         
-        # Array center and main direction
-        center_x = np.mean(element_x)
-        center_y = np.mean(element_y)
-        # Default array faces right (positive x)
-        array_face_direction = 0  
-        
         for i in range(len(element_x)):
+            # Modified distance calculation with directional component
             dx = X_calc - element_x[i]
             dy = Y_calc - element_y[i]
             distance = np.sqrt(dx**2 + dy**2)
             
+            # Add angular dependency
+            angle = np.arctan2(dy, dx)
+            asymmetric_factor = 1 + 0.2 * np.sin(angle)  # Introduces asymmetry
+            
+            # Modified phase calculation
             if unit.geometry_type == "Curved":
-                # Element normal vector (perpendicular to curve)
-                elem_angle = np.arctan2(element_y[i] - center_y, element_x[i] - center_x)
-                normal_angle = elem_angle + np.pi/2  # 90 degrees from radius
-                
-                # Calculate angle between propagation direction and normal
-                prop_angle = np.arctan2(dy, dx)
-                angle_diff = np.angle(np.exp(1j * (prop_angle - normal_angle)))
-                
-                # Only radiate in forward half-space (+/- 90 deg from normal)
-                # Include steering angle effect
-                effective_angle = angle_diff - steer_angle
-                directional_factor = np.where(
-                    np.abs(effective_angle) < np.pi/2,
-                    np.cos(effective_angle)**2,
-                    0.0
-                )
-                
-                # Phase calculation incorporating path length and steering
-                phase = k * (distance - element_x[i] * np.sin(steer_angle))
-                
-                # Amplitude with directional weighting
-                amplitude = directional_factor / (1 + distance/wavelength)
+                phase = k * (distance * asymmetric_factor - element_x[i] * np.sin(steer_angle))
             else:
-                phase = k * distance
-                amplitude = 1.0 / (1 + distance/wavelength)
+                phase = k * distance * asymmetric_factor
+            
+            # Direction-dependent amplitude decay
+            amplitude = np.where(distance < transition,
+                            1.0 / (distance * asymmetric_factor + wavelength/10),
+                            1.0 / np.sqrt(distance * asymmetric_factor + wavelength/10))
             
             wave = amplitude * np.sqrt(norm_freq)
             field += wave * np.exp(1j * phase) * np.clip(distance/transition, 0, 1)
