@@ -13,59 +13,70 @@ class FieldCalculator:
         self.x_field = x_field
         self.y_field = y_field
         self.X, self.Y = np.meshgrid(x_field, y_field)
+    
+    def calculate_array_geometry(self, unit):
+        """Calculate element positions based on array geometry."""
+        if unit.geometry_type == "Linear":
+            x_pos = np.arange(unit.num_elements) * unit.element_spacing
+            y_pos = np.zeros_like(x_pos)
+        else:  # Curved
+            theta = np.linspace(-np.pi/4, np.pi/4, unit.num_elements)
+            x_pos = unit.curvature_factor * np.cos(theta)
+            y_pos = unit.curvature_factor * np.sin(theta)
+        
+        return x_pos, y_pos
+
+    def _calculate_far_field_pattern(self, pattern, angles, x_pos, y_pos, k, steering, geom_type):
+        """Calculate far-field beam pattern contribution."""
+        for i in range(len(x_pos)):
+            if geom_type == "Linear":
+                phase = k * (x_pos[i] * (np.sin(angles) - np.sin(steering)))
+            else:
+                phase = k * (x_pos[i] * np.sin(angles) + y_pos[i] * np.cos(angles))
+            pattern += np.exp(1j * phase)
 
     def calculate_pattern(self, units: List['ArrayUnit']) -> Optional[np.ndarray]:
-        if not units:
+        """Calculate combined beam pattern for all array units."""
+        if not units or not any(u.enabled for u in units):
             return None
-            
+
+        # Setup parameters
         viewing_angles = np.linspace(-np.pi/2, np.pi/2, 1000)
         pattern = np.zeros_like(viewing_angles, dtype=np.complex128)
-        highest_freq = self._get_highest_frequency(units)
-        
-        # Initialize total pattern
-        total_pattern = np.zeros_like(viewing_angles, dtype=np.complex128)
-        active_units = [u for u in units if u.enabled]
-        
-        if not active_units:
-            return None
-        
-        # Calculate pattern for each unit
-        for unit in active_units:
-            # Convert angles to radians
-            steering_rad = np.deg2rad(unit.steering_angle)
-            
-            # Element positions based on geometry
-            if unit.geometry_type == "Linear":
-                element_positions = np.arange(unit.num_elements) * unit.element_spacing
-            else:  # Curved
-                theta = np.linspace(-np.pi/4, np.pi/4, unit.num_elements)
-                element_positions = unit.curvature_factor * np.column_stack((
-                    np.cos(theta),
-                    np.sin(theta)
-                ))
-            
-            # Calculate unit pattern
+        highest_freq = max([max(u.operating_freqs) for u in units if u.enabled])
+
+        # Process each active unit
+        for unit in units:
+            if not unit.enabled:
+                continue
+
+            # Calculate element positions
+            element_x, element_y = self.calculate_array_geometry(unit)
+            steering_rad = np.radians(unit.steering_angle)
+
+            # Process each frequency
             unit_pattern = np.zeros_like(viewing_angles, dtype=np.complex128)
-            
             for freq in unit.operating_freqs:
-                k = 2 * np.pi * freq  # Wavenumber
-                
-                # Phase calculation including position offset
-                for i, pos in enumerate(element_positions):
-                    if unit.geometry_type == "Linear":
-                        phase = k * pos * (np.sin(viewing_angles) - np.sin(steering_rad))
-                        phase += k * (unit.x_pos * np.sin(viewing_angles))
-                    else:
-                        phase = k * (pos[0] * np.sin(viewing_angles) + pos[1] * np.cos(viewing_angles))
-                        phase += k * (unit.x_pos * np.sin(viewing_angles) + unit.y_pos * np.cos(viewing_angles))
-                    
-                    unit_pattern += np.exp(1j * phase)
-                
-            # Add unit contribution to total pattern
-            total_pattern += unit_pattern / len(unit.operating_freqs)
-        
+                k = 2 * np.pi * (freq/highest_freq)
+                self._calculate_far_field_pattern(
+                    unit_pattern, viewing_angles, 
+                    element_x, element_y,
+                    k, steering_rad, 
+                    unit.geometry_type
+                )
+
+            # Add position offset phase
+            offset_phase = 2 * np.pi * (
+                unit.x_pos * np.sin(viewing_angles) + 
+                unit.y_pos * np.cos(viewing_angles)
+            )
+            unit_pattern *= np.exp(1j * offset_phase)
+            
+            # Combine patterns
+            pattern += unit_pattern / len(unit.operating_freqs)
+
         # Normalize final pattern
-        normalized_pattern = np.abs(total_pattern) / len(active_units)
+        normalized_pattern = np.abs(pattern)
         return normalized_pattern / np.max(normalized_pattern)
 
 
@@ -139,9 +150,9 @@ class FieldCalculator:
             return X_calc, Y_calc
 
     def _add_frequency_interference(self, unit: 'ArrayUnit', field: np.ndarray,
-                                  freq: float, highest_freq: float, element_x: np.ndarray,
-                                  element_y: np.ndarray, X_calc: np.ndarray,
-                                  Y_calc: np.ndarray, steer_angle: float) -> None:
+                          freq: float, highest_freq: float, element_x: np.ndarray,
+                          element_y: np.ndarray, X_calc: np.ndarray,
+                          Y_calc: np.ndarray, steer_angle: float) -> None:
         norm_freq = freq/highest_freq
         k = 2 * np.pi * norm_freq
         wavelength = 1/freq
@@ -149,14 +160,43 @@ class FieldCalculator:
         array_length = unit.num_elements * unit.element_spacing
         transition = 2 * array_length**2 / wavelength
         
+        # Array center and main direction
+        center_x = np.mean(element_x)
+        center_y = np.mean(element_y)
+        # Default array faces right (positive x)
+        array_face_direction = 0  
+        
         for i in range(len(element_x)):
-            distance = np.sqrt((X_calc - element_x[i])**2 + (Y_calc - element_y[i])**2)
+            dx = X_calc - element_x[i]
+            dy = Y_calc - element_y[i]
+            distance = np.sqrt(dx**2 + dy**2)
             
-            phase = k * (distance - element_x[i] * np.sin(steer_angle)) if unit.geometry_type == "Curved" else k * distance
-            
-            amplitude = np.where(distance < transition,
-                               1.0 / (distance + wavelength/10),
-                               1.0 / np.sqrt(distance + wavelength/10))
+            if unit.geometry_type == "Curved":
+                # Element normal vector (perpendicular to curve)
+                elem_angle = np.arctan2(element_y[i] - center_y, element_x[i] - center_x)
+                normal_angle = elem_angle + np.pi/2  # 90 degrees from radius
+                
+                # Calculate angle between propagation direction and normal
+                prop_angle = np.arctan2(dy, dx)
+                angle_diff = np.angle(np.exp(1j * (prop_angle - normal_angle)))
+                
+                # Only radiate in forward half-space (+/- 90 deg from normal)
+                # Include steering angle effect
+                effective_angle = angle_diff - steer_angle
+                directional_factor = np.where(
+                    np.abs(effective_angle) < np.pi/2,
+                    np.cos(effective_angle)**2,
+                    0.0
+                )
+                
+                # Phase calculation incorporating path length and steering
+                phase = k * (distance - element_x[i] * np.sin(steer_angle))
+                
+                # Amplitude with directional weighting
+                amplitude = directional_factor / (1 + distance/wavelength)
+            else:
+                phase = k * distance
+                amplitude = 1.0 / (1 + distance/wavelength)
             
             wave = amplitude * np.sqrt(norm_freq)
             field += wave * np.exp(1j * phase) * np.clip(distance/transition, 0, 1)
