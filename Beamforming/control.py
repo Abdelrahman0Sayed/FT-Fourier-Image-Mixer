@@ -471,17 +471,6 @@ class UnitControlPanel:
     def get_steering_angles(self):
         return [u.steering_angle for u in self.array_units if u.enabled]
     
-    def set_edit_mode(self, enabled: bool):
-        """Update UI elements for edit mode"""
-        self.edit_button.setEnabled(not enabled)
-        self.save_button.setEnabled(enabled)
-        self.cancel_button.setEnabled(enabled)
-        self.add_button.setEnabled(not enabled)
-        self.remove_button.setEnabled(not enabled)
-        
-    def disable_unit_selection(self):
-        """Disable unit selection during edit mode"""
-        self.units_list.setEnabled(False)
         
     def enable_unit_selection(self):
         """Enable unit selection after edit mode"""

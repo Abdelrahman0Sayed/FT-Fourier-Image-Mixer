@@ -16,7 +16,6 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from ImageDisplay import ImageDisplay
 from PIL import Image, ImageQt
 import logging
-from BaseUI import BaseUI
 
 
 logging.basicConfig(
@@ -334,24 +333,15 @@ class ModernWindow(QMainWindow):
             QApplication.processEvents()
 
             # Update display
-            height, width, channel = mixed_image.shape
-            bytesPerLine = 3 * width
+            height, width = mixed_image.shape
             
             # Convert memoryview to bytes
             image_bytes = mixed_image.tobytes()
             
             # Create the QImage
-            qImg = QtGui.QImage(image_bytes, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
-            
-            if qImg.isNull():  # Check if the QImage is valid
-                print("Error in converting image data to QImage")
-            else:
-                # Convert to grayscale if needed
-                qImg = qImg.rgbSwapped()
-                grayscale_qImg = qImg.convertToFormat(QtGui.QImage.Format_Grayscale8)
-                qImage =  grayscale_qImg
-            
-            if qImage and output_viewer and output_viewer.originalImageLabel:
+            qImg = QtGui.QImage(image_bytes, width, height, QtGui.QImage.Format_Grayscale8)
+
+            if qImg and output_viewer and output_viewer.originalImageLabel:
                 pixmap = QPixmap.fromImage(qImage)
                 output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.IgnoreAspectRatio))
 
@@ -1303,34 +1293,15 @@ class ImageViewerWidget(ModernWindow):
             filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
             if filePath:
                 # Load the image
-                self.imageData = cv2.imread(filePath)
-                
-                # Convert to grayscale
-                grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
-                
-                row, column = grayScaledImage.shape
-                print(row, column)
-                print(parent.minimumSize)
-                
-                # This means that's the first image 
-                if parent.minimumSize == (0, 0):
-                    parent.minimumSize = (row, column)
-
-                if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
-                    parent.minimumSize = (row, column)
-                    print(parent.minimumSize)
-
-                #cv2.resize(grayScaledImage, (column,row))
-                #self.unify_images(parent.viewers, parent.minimumSize)
+                self.imageData = cv2.imread(filePath, cv2.IMREAD_GRAYSCALE)
                 self.imageData = cv2.resize(self.imageData, (600,600))
-            
-                return grayScaledImage, self.imageData
-            
+                self.imageFourierTransform(self.imageData)
+                
+                return self.imageData
             return 
         except Exception as e:
             print(f"Error: {e}")
-
-
+    
 
     def unify_images(self, viewers, minimumSize):
         print("Unifying Images")
@@ -1342,23 +1313,49 @@ class ImageViewerWidget(ModernWindow):
                 print(f"Image resized to: {viewer.imageData.shape}")
                 self.imageFourierTransform(viewer.imageData)
 
+    def get_component_data(self, component):
+        if component == "magnitude":
+            return self.ftMagnitudes
+        elif component == "phase":
+            return self.ftPhase
+        elif component == "real":
+            return self.ftReal
+        else:
+            return self.ftImaginary
+        
+    def set_component_data(self, component, value):
+        if component == "magnitude":
+            self.ftMagnitudes = value
+        elif component == "phase":
+            self.ftPhase = value
+        elif component == "real":
+            self.ftReal = value
+        else:
+            self.ftImaginary = value
+
+    def find_parent_window(self):
+        # Get the top-level window
+        parent = self.parentWidget()
+        while parent:
+            if isinstance(parent, ModernWindow) and not isinstance(parent, ImageViewerWidget):
+                return parent
+            parent = parent.parentWidget()
+        return None
+    
+    def get_image_data(self):
+        return self.imageData
+    
 
     def imageFourierTransform(self, imageData):
-        width, height = self.qImage.width() , self.qImage.height()
-        ptr = self.qImage.bits()
-        ptr.setsize(width * height)
-        newImageData = np.frombuffer(ptr , np.uint8).reshape((height, width))
-        print(newImageData)
-
         fftComponents = np.fft.fft2(imageData)
         fftComponentsShifted = np.fft.fftshift(fftComponents)
-        self.fftComponents= fftComponents
-        # Get Magnitude and Phase
-        self.ftMagnitudes = np.abs(self.fftComponents)
-        self.ftPhase = np.angle(self.fftComponents)
-        # Get the Real and Imaginary parts
-        self.ftReal = np.real(self.fftComponents)
-        self.ftImaginary = np.imag(self.fftComponents)
+        self.fftComponents= fftComponentsShifted
+        ftMagnitudes_Spectrum = np.abs(self.fftComponents)
+        
+        self.set_component_data("magnitude", ftMagnitudes_Spectrum)    
+        self.set_component_data("phase" , np.angle(self.fftComponents))
+        self.set_component_data("real", np.real(self.fftComponents))
+        self.set_component_data("imaginary", np.imag(self.fftComponents))
 
 
     def displayFrequencyComponent(self, PlottedComponent):
@@ -1483,19 +1480,12 @@ class ImageViewerWidget(ModernWindow):
 
     def convert_data_to_image(self, imageData):
         try:
-            # Convert the image data to a QImage
-            height, width, channel = imageData.shape
-            bytesPerLine = 3 * width
-            qImg = QtGui.QImage(imageData.data, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
-            if qImg is None:
-                print("Error in converting image data to QImage")
-        
-            qImg = qImg.rgbSwapped()
-            grayscale_qImg = qImg.convertToFormat(QtGui.QImage.Format_Grayscale8)
-            
-            return grayscale_qImg
+            height, width = imageData.shape
+            qImg = QtGui.QImage(imageData.data, width, height, QtGui.QImage.Format_Grayscale8)
+            return qImg
         except Exception as e:
             print(e)
+
 
 
 
@@ -1611,6 +1601,14 @@ class ImageViewerWidget(ModernWindow):
                 scaled_size.toSize(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
 
   
+
+def array_to_pixmap(self, array):
+        height, width = array.shape
+        bytes_per_line = width
+        image_data = array.tobytes()
+        qimage = QImage(image_data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+        return QPixmap.fromImage(qimage) 
+
 
 
 if __name__ == '__main__':

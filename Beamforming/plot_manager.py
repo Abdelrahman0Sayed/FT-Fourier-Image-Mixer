@@ -31,29 +31,6 @@ class BasePlot(ABC):
         self.figure.clear()
     
 class PatternPlot(BasePlot):
-    def _show_beam_metrics(self, ax, theta, pattern_db):
-        """Calculate and display beam pattern metrics."""
-        # Find main lobe peak
-        peak_idx = np.argmax(pattern_db)
-        peak_angle = np.degrees(theta[peak_idx])
-        
-        # Calculate -3dB beam width
-        beam_width = self._calculate_beam_width(theta, pattern_db)
-        
-        # Add annotations
-        text_props = dict(color='white', fontsize=10, transform=ax.transAxes)
-        ax.text(1.2, 0.95, f'Peak: {peak_angle:.1f}°', **text_props)
-        ax.text(1.2, 0.90, f'Beam Width: {beam_width:.1f}°', **text_props)
-
-    def _calculate_beam_width(self, theta, pattern_db):
-        """Calculate -3dB beam width."""
-        mask = pattern_db >= -3
-        if not np.any(mask):
-            return 0
-        crossing_points = np.where(np.diff(mask))[0]
-        if len(crossing_points) >= 2:
-            return abs(np.degrees(theta[crossing_points[1]] - theta[crossing_points[0]]))
-        return 0
 
     def update(self, theta, pattern, steering_angles, show_full_pattern=False):
         """Update the beam pattern visualization."""
@@ -67,13 +44,6 @@ class PatternPlot(BasePlot):
         ax = self.figure.add_subplot(111, projection='polar')
         ax.set_theta_zero_location('N')
         ax.set_theta_direction(-1)
-
-        # 2. Process pattern based on full/half view
-        if show_full_pattern:
-            theta_full = np.concatenate([theta, theta + np.pi])
-            pattern_full = np.concatenate([pattern, pattern])
-            theta = theta_full
-            pattern = pattern_full
 
         # 3. Convert to dB scale
         pattern_db = 20 * np.log10(np.clip(np.abs(pattern), 1e-10, None))
@@ -99,15 +69,6 @@ class PatternPlot(BasePlot):
         ax.set_xticks(np.radians(angles % 360))
         ax.set_xticklabels([''] * len(angles))
 
-        # 8. Add steering angle indicators
-        if steering_angles:
-            for angle in steering_angles:
-                if angle != 0:
-                    angle_rad = np.radians(angle)
-                    ax.plot([angle_rad, angle_rad], [0, 40],
-                        color='#ff5722', linestyle='--',
-                        linewidth=1.5, alpha=0.7,
-                        label=f'Steering {angle}°')
 
         # 9. Final styling
         ax.grid(True, color='white', alpha=0.1, linestyle=':')

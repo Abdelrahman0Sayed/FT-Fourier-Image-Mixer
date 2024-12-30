@@ -1,3 +1,8 @@
+
+"""
+    This is the Whole Application without applying OOP Concepts 
+"""
+
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
@@ -165,7 +170,7 @@ class BeamformingSimulator(QMainWindow):
         
         # Initialize field variables
         self.x_field = np.linspace(-30, 30, 200)
-        self.y_field = np.linspace(-30, 30, 200)
+        self.y_field = np.linspace(0, 60, 200)
         self.X, self.Y = np.meshgrid(self.x_field, self.y_field)
         
         # Create central widget and layout
@@ -313,7 +318,7 @@ class BeamformingSimulator(QMainWindow):
         # Left - Beam pattern
         pattern_container = QWidget()
         pattern_layout = QVBoxLayout(pattern_container)
-        self.pattern_fig = Figure(figsize=(6, 6))
+        self.pattern_fig = Figure(figsize=(10, 10))
         self.pattern_fig.patch.set_facecolor('#1e1e1e')
         self.pattern_canvas = FigureCanvasQTAgg(self.pattern_fig)
         pattern_layout.addWidget(self.pattern_canvas)
@@ -326,7 +331,7 @@ class BeamformingSimulator(QMainWindow):
         # Right - Interference pattern
         interference_container = QWidget()
         interference_layout = QVBoxLayout(interference_container)
-        self.interference_fig = Figure(figsize=(6, 6))
+        self.interference_fig = Figure(figsize=(10, 10))
         self.interference_fig.patch.set_facecolor('#1e1e1e')
         self.interference_canvas = FigureCanvasQTAgg(self.interference_fig)
         interference_layout.addWidget(self.interference_canvas)
@@ -347,7 +352,7 @@ class BeamformingSimulator(QMainWindow):
         array_layout = QVBoxLayout(array_container)
         array_layout.setContentsMargins(0, 0, 0, 0)  # Remove container margins
         
-        self.array_fig = Figure(figsize=(12, 6))  # Wider figure
+        self.array_fig = Figure(figsize=(12, 8))  # Wider figure
         self.array_fig.patch.set_facecolor('#1e1e1e')
         self.array_canvas = FigureCanvasQTAgg(self.array_fig)
         array_layout.addWidget(self.array_canvas)
@@ -356,32 +361,7 @@ class BeamformingSimulator(QMainWindow):
         array_toolbar.setStyleSheet("background-color: #2d2d2d; color: white;")
         array_layout.addWidget(array_toolbar)
 
-        # Add checkbox for pattern shape
-        pattern_controls = QHBoxLayout()
-        self.full_pattern_checkbox = QCheckBox("Show Full Pattern")
-        self.full_pattern_checkbox.setStyleSheet("""
-            QCheckBox {
-                color: white;
-                spacing: 5px;
-            }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-            }
-            QCheckBox::indicator:unchecked {
-                background-color: #2d2d2d;
-                border: 2px solid #3a3a3a;
-                border-radius: 4px;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #2196f3;
-                border: 2px solid #1976d2;
-                border-radius: 4px;
-            }
-        """)
-        self.full_pattern_checkbox.toggled.connect(self.update_pattern)
-        pattern_controls.addWidget(self.full_pattern_checkbox)
-        pattern_layout.addLayout(pattern_controls)
+        
         
         array_container.setLayout(array_layout)
         array_row.addWidget(array_container, stretch=1)  # Add stretch factor
@@ -421,56 +401,52 @@ class BeamformingSimulator(QMainWindow):
             y = radius * (1 - np.cos(angles)) + unit.y_pos
         return x, y
 
-    def calculate_combined_pattern(self):
+    def calculate_combined_pattern(self):    
         # Step 1: Setup basic parameters
-        viewing_angles = np.linspace(-np.pi/2, np.pi/2, 1000)  # -90° to +90°
+        viewing_angles = np.linspace(-np.pi/2, np.pi/2, 1000)
         beam_pattern = np.zeros_like(viewing_angles, dtype=np.complex128)
         field_interference = np.zeros_like(self.X, dtype=np.complex128)
         
-        # Find highest frequency among all active units
+        # Find reference frequency for normalization
         highest_freq = max([max(unit.operating_freqs) for unit in self.array_units if unit.enabled])
         
         # Step 2: Process each active array unit
         for unit in self.array_units:
             if not unit.enabled:
                 continue
-            
-            # Get unit position coordinates
+                
             element_x, element_y = self.calculate_array_geometry(unit)
             steering_angle = np.radians(unit.steering_angle)
             
             # Step 3: Process each frequency
             for freq in unit.operating_freqs:
-                # Basic wave parameters
-                normalized_freq = freq/highest_freq
-                wave_number = 2 * np.pi * normalized_freq
-                wave_length = 1/freq
+                # Modified frequency scaling to enhance beam width variation
+                freq_scale = freq/highest_freq
+                k = 2 * np.pi * freq_scale  # Scaled wavenumber
+                wavelength = 2 * np.pi/k
                 
-                # Calculate transition distance from near to far field
-                array_length = unit.num_elements * unit.element_spacing
-                near_far_transition = 2 * array_length**2 / wave_length
+                # Calculate array parameters scaled by frequency
+                array_length = unit.num_elements * unit.element_spacing * wavelength
+                near_far_transition = 2 * array_length**2 / wavelength
                 
-                # Step 4: Calculate far-field pattern
+                # Calculate patterns with enhanced frequency dependence
                 self._calculate_far_field_pattern(
                     beam_pattern, viewing_angles, element_x, element_y,
-                    wave_number, steering_angle, unit.geometry_type
+                    k, steering_angle, unit.geometry_type, freq_scale
                 )
                 
-                # Step 5: Calculate interference field
                 self._calculate_interference_field(
                     field_interference, element_x, element_y,
-                    wave_number, wave_length, steering_angle,
-                    near_far_transition, normalized_freq, unit.geometry_type
+                    k, wavelength, steering_angle,
+                    near_far_transition, freq_scale, unit.geometry_type
                 )
         
-        # Step 6: Normalize and update plots
         normalized_pattern = self._normalize_pattern(beam_pattern)
-        interference_display = self._process_interference(field_interference)
-        
-        # Update all visualization plots
-        self._update_all_plots(normalized_pattern, viewing_angles, interference_display)
+        processed_interference = self._process_interference(field_interference)
+        self._update_all_plots(normalized_pattern, viewing_angles, processed_interference)
 
-    def _calculate_far_field_pattern(self, pattern, angles, x, y, k, steer_angle, geometry):
+    def _calculate_far_field_pattern(self, pattern, angles, x, y, k, steer_angle, geometry, freq_scale):
+        # Modified to show stronger frequency dependence
         for i, theta in enumerate(angles):
             if geometry == "Linear":
                 phase = k * (x * np.sin(theta) + y * np.cos(theta))
@@ -481,39 +457,45 @@ class BeamformingSimulator(QMainWindow):
                 r_steer = np.sqrt((x * np.sin(steer_angle))**2 + (y * np.cos(steer_angle))**2)
                 steer_phase = k * r_steer
             
-            pattern[i] += np.sum(np.exp(1j * (phase - steer_phase)))
+            # Enhanced frequency-dependent amplitude scaling
+            amplitude = freq_scale**1.5  # More pronounced frequency effect
+            pattern[i] += amplitude * np.sum(np.exp(1j * (phase - steer_phase)))
 
     def _calculate_interference_field(self, interference, x, y, k, wavelength, 
-                            steer_angle, transition_dist, freq_scale, geometry):
-        # Calculate array center
+                    steer_angle, transition_dist, freq_scale, geometry):
         array_center_x = np.mean(x)
         array_center_y = np.mean(y)
-
-        # Create rotated coordinate system
-        theta = -steer_angle  # Negative for clockwise rotation
+        theta = -steer_angle
         
-        # Rotate entire field coordinates
+        # Rotated coordinates
         X_rot = (self.X - array_center_x) * np.cos(theta) - (self.Y - array_center_y) * np.sin(theta) + array_center_x
         Y_rot = (self.X - array_center_x) * np.sin(theta) + (self.Y - array_center_y) * np.cos(theta) + array_center_y
         
-        # Calculate field for each element
+        # Enhanced beam width scaling with frequency
+        beam_width_factor = (1 / freq_scale) ** 2  # Quadratic scaling for more pronounced effect
+        
+        # Wavelength-dependent spreading
+        spread_distance = wavelength * 5  # Scale spreading with wavelength
+        
         for i in range(len(x)):
-            # Distance in rotated coordinates
             distance = np.sqrt((X_rot - x[i])**2 + (Y_rot - y[i])**2)
             
-            # Phase calculation without separate steering
-            wave_phase = k * distance
+            # Phase calculation with frequency scaling
+            phase = k * distance
             
-            # Amplitude calculation
-            amplitude = np.where(distance < transition_dist,
-                            1.0 / (distance + wavelength/10),  # Near field
-                            1.0 / np.sqrt(distance + wavelength/10))  # Far field
+            # Modified amplitude calculation with enhanced frequency dependence
+            amplitude = np.where(
+                distance < transition_dist,
+                beam_width_factor / (1 + distance/spread_distance),  # Enhanced near field
+                beam_width_factor / np.sqrt(1 + distance/spread_distance)  # Enhanced far field
+            )
             
-            # Add element contribution
-            wave = amplitude * np.sqrt(freq_scale)
-            phase = np.exp(1j * wave_phase)
-            interference += wave * phase * np.clip(distance / transition_dist, 0, 1)
-
+            # Apply wavelength-dependent spreading
+            spread_factor = np.exp(-distance / (transition_dist * beam_width_factor))
+            amplitude *= spread_factor
+            
+            interference += amplitude * np.exp(1j * phase)
+                
     def _normalize_pattern(self, pattern):
         pattern = np.abs(pattern)
         return pattern / np.max(pattern) if np.max(pattern) > 0 else pattern
@@ -576,87 +558,65 @@ class BeamformingSimulator(QMainWindow):
         self.interference_canvas.draw()
 
     def update_pattern_plot(self, theta, pattern):
-        """Visualizes the beam pattern in polar coordinates with detailed annotations.
-        
-        Parameters:
-            theta: Array of angles in radians
-            pattern: Array of beam pattern magnitudes
-        
-        The plot shows:
-            - Main lobe (>-3dB) and side lobes
-            - Power levels in dB scale
-            - Beam width and directivity metrics
-            - Steering angle indicators
-        """
-        # 1. Setup polar plot
+        """Visualizes the beam pattern in polar coordinates"""
+        # Clear previous plot
         self.pattern_fig.clear()
         ax = self.pattern_fig.add_subplot(111, projection='polar')
-        ax.set_theta_zero_location('N')  # 0° at top
-        ax.set_theta_direction(-1)       # Clockwise rotation
         
-        # 2. Convert pattern to dB scale
-        if self.full_pattern_checkbox.isChecked():
-            # Create full 360° pattern by mirroring
-            theta_full = np.concatenate([theta, theta + np.pi])
-            pattern_full = np.concatenate([pattern, pattern])
-            
-            pattern_db_full = 20 * np.log10(np.clip(pattern_full, 1e-10, None))
-            pattern_db_full = np.clip(pattern_db_full, -40, 0)
-            normalized_pattern = pattern_db_full + 40
-            
-            main_lobe_mask = pattern_db_full >= -3
-            side_lobe_mask = (pattern_db_full < -3) & (pattern_db_full >= -20)
-            
-            # Plot full pattern
-            ax.fill_between(theta_full, 0, normalized_pattern,
-                        where=main_lobe_mask, color='#2196f3', alpha=0.3)
-            ax.fill_between(theta_full, 0, normalized_pattern,
-                        where=side_lobe_mask, color='#ff9800', alpha=0.2)
-                        
-            # Calculate metrics using original pattern
-            pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
-            pattern_db = np.clip(pattern_db, -40, 0)
-        else:
-            # Original half-pattern code
-            pattern_db = 20 * np.log10(np.clip(pattern, 1e-10, None))
-            pattern_db = np.clip(pattern_db, -40, 0)
-            normalized_pattern = pattern_db + 40
-            
-            main_lobe_mask = pattern_db >= -3
-            side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
-            
-            
-            ax.fill_between(theta, 0, normalized_pattern,
+        # Configure plot orientation
+        ax.set_theta_direction(-1)
+        ax.set_theta_offset(np.pi/2)
+        
+        # Prepare data for plotting
+        mask = (theta >= -np.pi/2) & (theta <= np.pi/2)
+        theta_plot = theta[mask]
+        pattern_plot = pattern[mask]
+        
+        # Convert to dB scale with proper normalization
+        pattern_db = 20 * np.log10(np.clip(pattern_plot, 1e-10, None))
+        pattern_db = np.clip(pattern_db, -40, 0)  # Limit dynamic range
+        normalized_pattern = pattern_db + 40  # Shift to positive values for visualization
+        
+        # Plot main and side lobes
+        main_lobe_mask = pattern_db >= -3
+        side_lobe_mask = (pattern_db < -3) & (pattern_db >= -20)
+        
+        ax.fill_between(theta_plot, 0, normalized_pattern,
                         where=main_lobe_mask,
                         color='#2196f3', alpha=0.3,
                         label='Main Lobe (-3dB)')
-            ax.fill_between(theta, 0, normalized_pattern,
+        ax.fill_between(theta_plot, 0, normalized_pattern,
                         where=side_lobe_mask,
                         color='#ff9800', alpha=0.2,
                         label='Side Lobes')
         
-
-        # 6. Calculate and display beam metrics
-        self._show_beam_metrics(ax, theta, pattern_db)
-        
-        # 7. Add angle markers around plot
-        angles = np.arange(90, 450, 15)  # 15° steps, starting from top
-        ax.set_xticks(np.radians(angles % 360))
-        ax.set_xticklabels([f'{int(ang % 360)}°' for ang in angles],
-                        fontsize=10, color='white')
-        
-        # 8. Show steering angle indicators for each unit
+        # Add beam metrics and power level indicators
+        self._add_power_level_indicators(ax)
+        self._show_beam_metrics(ax, theta_plot, pattern_db)
         self._add_steering_indicators(ax)
         
-        # 9. Final styling
+        # Configure plot appearance
+        ax.set_thetamin(-90)
+        ax.set_thetamax(90)
+        ax.set_ylim(0, 60)
+        ax.set_rticks([0, 15, 30, 45, 60])
+        ax.set_rlabel_position(90)
         ax.grid(True, color='white', alpha=0.1, linestyle=':')
-        ax.set_ylim(0, 45)
+        ax.set_facecolor('#1e1e1e')
+        ax.tick_params(colors='white')
         ax.set_title('Beam Pattern Analysis',
                     color='white', pad=20,
                     fontsize=14, fontweight='bold')
-        ax.set_facecolor('#1e1e1e')
-        ax.tick_params(colors='white')
         
+        # Add legend
+        ax.legend(loc='upper right', 
+                bbox_to_anchor=(1.3, 1.1),
+                facecolor='#2d2d2d',
+                edgecolor='none',
+                labelcolor='white')
+        
+        # Update canvas
+        self.pattern_fig.tight_layout()
         self.pattern_canvas.draw()
 
     def _add_power_level_indicators(self, ax):
@@ -941,7 +901,7 @@ class BeamformingSimulator(QMainWindow):
                             "steering_angle": 0,
                             "geometry_type": "Linear",
                             "curvature_factor": 1.0,
-                            "operating_freqs": [2.8],
+                            "operating_freqs": [100],
                             "x_pos": 0,
                             "y_pos": 0,
                             
@@ -973,7 +933,7 @@ class BeamformingSimulator(QMainWindow):
                     "units": [
                         {
                             "name": "Tumor Ablation Array",
-                            "num_elements": 20,
+                            "num_elements": 35,
                             "element_spacing": 0.25,
                             "steering_angle": 0,
                             "geometry_type": "Curved",

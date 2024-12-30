@@ -151,9 +151,9 @@ class FieldCalculator:
             return X_calc, Y_calc
 
     def _add_frequency_interference(self, unit: 'ArrayUnit', field: np.ndarray,
-                              freq: float, highest_freq: float, element_x: np.ndarray,
-                              element_y: np.ndarray, X_calc: np.ndarray,
-                              Y_calc: np.ndarray, steer_angle: float) -> None:
+                          freq: float, highest_freq: float, element_x: np.ndarray,
+                          element_y: np.ndarray, X_calc: np.ndarray,
+                          Y_calc: np.ndarray, steer_angle: float) -> None:
         norm_freq = freq/highest_freq
         k = 2 * np.pi * norm_freq
         wavelength = 1/freq
@@ -161,26 +161,26 @@ class FieldCalculator:
         array_length = unit.num_elements * unit.element_spacing
         transition = 2 * array_length**2 / wavelength
         
+        # Frequency-dependent spread factor - higher at lower frequencies
+        spread_factor = 1 + (1 - norm_freq) * 2
+        
         for i in range(len(element_x)):
-            # Modified distance calculation with directional component
             dx = X_calc - element_x[i]
             dy = Y_calc - element_y[i]
             distance = np.sqrt(dx**2 + dy**2)
             
-            # Add angular dependency
             angle = np.arctan2(dy, dx)
-            asymmetric_factor = 1 + 0.2 * np.sin(angle)  # Introduces asymmetry
+            asymmetric_factor = 1 + 0.2 * np.sin(angle)
             
-            # Modified phase calculation
             if unit.geometry_type == "Curved":
                 phase = k * (distance * asymmetric_factor - element_x[i] * np.sin(steer_angle))
             else:
                 phase = k * distance * asymmetric_factor
             
-            # Direction-dependent amplitude decay
-            amplitude = np.where(distance < transition,
-                            1.0 / (distance * asymmetric_factor + wavelength/10),
-                            1.0 / np.sqrt(distance * asymmetric_factor + wavelength/10))
+            # Modified amplitude with frequency-dependent spread
+            amplitude = np.where(distance < transition * spread_factor,
+                            1.0 / (distance/spread_factor + wavelength/10),
+                            1.0 / np.sqrt(distance/spread_factor + wavelength/10))
             
             wave = amplitude * np.sqrt(norm_freq)
             field += wave * np.exp(1j * phase) * np.clip(distance/transition, 0, 1)

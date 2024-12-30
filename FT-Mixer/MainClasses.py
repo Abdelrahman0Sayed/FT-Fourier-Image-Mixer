@@ -13,6 +13,7 @@ from PyQt5 import QtGui
 from ImageDisplay import ImageDisplay
 from PIL import Image
 import logging
+
 logging.basicConfig(
     level=logging.DEBUG,  # Set the logging level
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -227,6 +228,7 @@ class ModernWindow(QMainWindow):
                                          center_y - start_y: center_y + end_y] = 0
 
                     weight = viewer.weight1_slider.value() / 100.0
+                    print(f"My Weight: {weight}")
                     components.append({
                         'ft': ftComponents.copy(),
                         'weight': weight,
@@ -240,13 +242,18 @@ class ModernWindow(QMainWindow):
             QApplication.processEvents()
             mix_type = self.mix_type.currentText()
             if mix_type == "Magnitude/Phase":
-                result = self.mix_magnitude_phase(components)
+                result, zeroPhase = self.mix_magnitude_phase(components)
             else:
-                result = self.mix_real_imaginary(components)
+                result, zeroPhase = self.mix_real_imaginary(components)
             QApplication.processEvents()
             # Process result
-            mixed_image = np.fft.ifft2(result)
+
+      
+            mixed_image = np.fft.ifftshift(result)
+            mixed_image = np.fft.ifft2(mixed_image)
             mixed_image = np.abs(mixed_image)
+            if zeroPhase:
+                mixed_image = np.log1p(mixed_image)
             mixed_image = ((mixed_image - mixed_image.min()) * 255 / (mixed_image.max() - mixed_image.min()))
             mixed_image = mixed_image.astype(np.uint8)
             output_index = self.output_selector.currentIndex()
@@ -255,22 +262,10 @@ class ModernWindow(QMainWindow):
                 return
             QApplication.processEvents()
             # Update display
-            height, width, channel = mixed_image.shape
-            bytesPerLine = 3 * width
-            # Convert memoryview to bytes
-            image_bytes = mixed_image.tobytes()
-            # Create the QImage
-            qImg = QtGui.QImage(image_bytes, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
-            if qImg.isNull():  # Check if the QImage is valid
-                print("Error in converting image data to QImage")
-            else:
-                # Convert to grayscale if needed
-                qImg = qImg.rgbSwapped()
-                grayscale_qImg = qImg.convertToFormat(QtGui.QImage.Format_Grayscale8)
-                qImage =  grayscale_qImg
-            
-            if qImage and output_viewer and output_viewer.originalImageLabel:
-                pixmap = QPixmap.fromImage(qImage)
+            for viewer in self.viewers:
+                pixmap = viewer.array_to_pixmap(mixed_image)
+                break
+            if pixmap and output_viewer and output_viewer.originalImageLabel:
                 output_viewer.originalImageLabel.setPixmap(pixmap.scaled(300, 300, Qt.IgnoreAspectRatio))
 
             QApplication.processEvents()
@@ -297,6 +292,7 @@ class ModernWindow(QMainWindow):
                 else:
                     magnitude = 0
                 magnitude = np.abs(comp['ft'])
+                print(f"Weight: {weight}")
                 total_magnitude += weight * magnitude
             print("Magnitude Done")
             
@@ -310,9 +306,14 @@ class ModernWindow(QMainWindow):
                 else:
                     phase = 0
                 total_phase += weight * phase
-
+            print(f" Total: {total_magnitude}")
+                
             result = total_magnitude * np.exp(1j * total_phase)
-            return result
+            
+            if np.sum(total_phase) < 1:
+                return result , True
+            
+            return result , False
             
         except Exception as e:
             print(f"Error in magnitude/phase mixing: {str(e)}")
@@ -329,7 +330,7 @@ class ModernWindow(QMainWindow):
                     real = np.real(comp['ft'])
                 else:
                     real = 0
-                result.real += weight * comp['ft'].real
+                result.real += weight * real
             
             for comp in components:
                 weight = comp['weight']
@@ -338,13 +339,17 @@ class ModernWindow(QMainWindow):
                     imag = np.imag(comp['ft'])
                 else:
                     imag = 0
-                result.imag += weight * comp['ft'].imag
+                result.imag += weight * imag
             
-            return result
+            result = result.real + 1j * result.imag
+            
+            
+            return result , False
             
         except Exception as e:
             print(f"Error in real/imaginary mixing: {str(e)}")
             raise
+
 
     def buildUI(self):
         # Main container
@@ -1005,15 +1010,12 @@ class ImageViewerWidget(ModernWindow):
             adjusted_image = cv2.convertScaleAbs(self.imageData, alpha=self.contrast, beta=self.brightness)
             adjusted_image = np.clip(adjusted_image, 0, 255).astype(np.uint8)
             # Convert NumPy array back to QImage
-            height, width, channel = adjusted_image.shape
+            height, width = adjusted_image.shape
             bytes_per_line = 3 * width
-            q_image = QImage(adjusted_image.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            q_image = QImage(adjusted_image.data, width, height, QImage.Format_Grayscale8)
             # Convert to grayscale if needed (optional step, remove if not desired)
-            q_image = q_image.convertToFormat(QImage.Format_Grayscale8)
             # Update QLabel display
             pixmap_image = QPixmap.fromImage(q_image)
-            label_width = self.originalImageLabel.width()
-            label_height = self.originalImageLabel.height()
             pixmap_image = pixmap_image.scaled(300, 300, Qt.IgnoreAspectRatio)
             self.originalImageLabel.setPixmap(pixmap_image)
             return adjusted_image
@@ -1061,32 +1063,84 @@ class ImageViewerWidget(ModernWindow):
             filePath, _ = QFileDialog.getOpenFileName(None, "Open Image", "", "Image Files (*.png *.jpg *.jpeg *.bmp)")
             if filePath:
                 # Load the image
-                self.imageData = cv2.imread(filePath)
-                # Convert to grayscale
-                grayScaledImage = cv2.cvtColor(self.imageData, cv2.COLOR_BGR2GRAY)
-                row, column = grayScaledImage.shape
-                print(row, column)
-                print(parent.minimumSize)
-                
-                # This means that's the first image 
-                if parent.minimumSize == (0, 0):
-                    parent.minimumSize = (row, column)
-                if parent.minimumSize >= (row, column) and (row, column) != (0, 0):
-                    parent.minimumSize = (row, column)
-                    print(parent.minimumSize)
-
-                parent = self.find_parent_window()
-                #cv2.resize(grayScaledImage, (column,row))F
-                #parent.unify_images(parent.minimumSize)
-
+                self.imageData = cv2.imread(filePath, cv2.IMREAD_GRAYSCALE)
                 self.imageData = cv2.resize(self.imageData, (600,600))
-                return grayScaledImage, self.imageData
-            
+                self.imageFourierTransform(self.imageData)
+                
+                return self.imageData
             return 
         except Exception as e:
             print(f"Error: {e}")
 
     # ------------------------------------------------------------- Getters and Setters ------------------------------------------------------------ #
+    def imageFourierTransform(self, imageData):
+        fftComponents = np.fft.fft2(imageData)
+        fftComponentsShifted = np.fft.fftshift(fftComponents)
+        self.fftComponents= fftComponentsShifted
+        ftMagnitudes_Spectrum = np.abs(self.fftComponents)
+        
+        self.set_component_data("magnitude", ftMagnitudes_Spectrum)
+        
+        
+        self.set_component_data("phase" , np.angle(self.fftComponents))
+        self.set_component_data("real", np.real(self.fftComponents))
+        self.set_component_data("imaginary", np.imag(self.fftComponents))
+
+    def array_to_pixmap(self, array):
+        height, width = array.shape
+        bytes_per_line = width
+        image_data = array.tobytes()
+        qimage = QImage(image_data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+        return QPixmap.fromImage(qimage)
+
+    def displayFrequencyComponent(self, PlottedComponent):    
+        if PlottedComponent == "FT Magnitude":
+            # Take the Magnitude as log scale
+            #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
+            ftMagnitudes = self.get_component_data("magnitude")
+            ftLog = np.log1p(ftMagnitudes)
+            ftNormalized = (255 * (ftLog - ftLog.min()) / (ftLog.max() - ftLog.min())).astype(np.uint8)
+            pixmap = self.array_to_pixmap(ftNormalized)
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.magnitudeImage = pixmap
+            self.ftComponentLabel.setPixmap(pixmap)
+
+        elif PlottedComponent == "FT Phase":
+            # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
+            #ftPhases = np.fft.fftshift(self.ftPhase)
+            ftPhases = self.get_component_data("phase")
+            f_normalized =  (255 * (ftPhases - ftPhases.min()) / (ftPhases.max() - ftPhases.min())).astype(np.uint8)
+            pixmap = self.array_to_pixmap(f_normalized)
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.phaseImage = pixmap
+            self.ftComponentLabel.setPixmap(pixmap)
+
+        elif PlottedComponent == "FT Real":
+            # Normalization and Adjustment for visualization
+            #ftReals = np.fft.fftshift(self.ftReal)
+            ftReals = self.get_component_data("real")
+            f_normalized = (255 * (ftReals - ftReals.min()) / (ftReals.max() - ftReals.min())).astype(np.uint8)
+            pixmap = self.array_to_pixmap(f_normalized)
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.realImage = pixmap
+            self.ftComponentLabel.setPixmap(pixmap)
+
+        elif PlottedComponent == "FT Imaginary":
+            #ftImaginaries = np.fft.fftshift(self.ftImaginary)
+            ftImaginaries = self.get_component_data("imaginary")
+            ftNormalized =  (255 * (ftImaginaries - ftImaginaries.min()) / (ftImaginaries.max() - ftImaginaries.min())).astype(np.uint8)
+            pixmap = self.array_to_pixmap(ftNormalized)
+            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
+            self.imaginaryImage = pixmap
+            self.ftComponentLabel.setPixmap(pixmap)
+
+        parent = self.find_parent_window()
+        parent.real_time_mix()
+        if parent.region_size.isChecked():
+            parent.draw_rectangle( parent.viewers ,parent.region)
+
+
+    #-------------------------------------------------------------------------------------------------------------------------------------- #
     def get_component_data(self, component):
         if component == "magnitude":
             return self.ftMagnitudes
@@ -1119,71 +1173,7 @@ class ImageViewerWidget(ModernWindow):
     def get_image_data(self):
         return self.imageData
 
-    # ------------------------------------------------------------- Frequency Label Functions ------------------------------------------------------ #
-    def imageFourierTransform(self, imageData):
-        fftComponents = np.fft.fft2(imageData)
-        fftComponentsShifted = np.fft.fftshift(fftComponents)
-        self.fftComponents= fftComponents
-        self.set_component_data("magnitude", np.abs(self.fftComponents))
-        self.set_component_data("phase" , np.angle(self.fftComponents))
-        self.set_component_data("real", np.real(self.fftComponents))
-        self.set_component_data("imaginary", np.imag(self.fftComponents))
-
-    def displayFrequencyComponent(self, PlottedComponent):    
-        if PlottedComponent == "FT Magnitude":
-            # Take the Magnitude as log scale
-            #ftMagnitudes = np.fft.fftshift(self.ftMagnitudes)
-            ftMagnitudes = self.get_component_data("magnitude")
-            ftLog = 15 * np.log(ftMagnitudes)
-            ftNormalized = cv2.normalize(ftLog , None , 0, 255 , cv2.NORM_MINMAX).astype(np.uint8)
-            pil_image = Image.fromarray(np.uint8(ftLog)) 
-            qimage = self.convert_from_pil_to_qimage(pil_image)
-            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
-            pixmap = QPixmap.fromImage(qimage)
-            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
-            self.magnitudeImage = pixmap
-            self.ftComponentLabel.setPixmap(pixmap)
-        elif PlottedComponent == "FT Phase":
-            # Ensure phase is within -pi to pi range and Ajdust for visualization (between 0 - 255)
-            #ftPhases = np.fft.fftshift(self.ftPhase)
-            ftPhases = self.get_component_data("phase")
-            f_wrapped = np.angle(np.exp(1j * ftPhases))  
-            f_normalized = (f_wrapped + np.pi) / (2 * np.pi) * 255
-            pil_image = Image.fromarray(np.uint8(f_normalized)) 
-            qimage = self.convert_from_pil_to_qimage(pil_image)
-            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
-            pixmap = QPixmap.fromImage(qimage)
-            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
-            self.phaseImage = pixmap
-            self.ftComponentLabel.setPixmap(pixmap)
-        elif PlottedComponent == "FT Real":
-            # Normalization and Adjustment for visualization
-            #ftReals = np.fft.fftshift(self.ftReal)
-            ftReals = self.get_component_data("real")
-            ftNormalized = np.abs(ftReals)
-            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
-            qimage = self.convert_from_pil_to_qimage(pil_image)
-            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
-            pixmap = QPixmap.fromImage(qimage)
-            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
-            self.realImage = pixmap
-            self.ftComponentLabel.setPixmap(pixmap)
-        elif PlottedComponent == "FT Imaginary":
-            #ftImaginaries = np.fft.fftshift(self.ftImaginary)
-            ftImaginaries = self.get_component_data("imaginary")
-            ftNormalized = np.abs(ftImaginaries)
-            pil_image = Image.fromarray(np.uint8(ftNormalized)) 
-            qimage = self.convert_from_pil_to_qimage(pil_image)
-            qimage = qimage.convertToFormat(QImage.Format_Grayscale8)
-            pixmap = QPixmap.fromImage(qimage)
-            pixmap = pixmap.scaled(300, 300, Qt.IgnoreAspectRatio)
-            self.imaginaryImage = pixmap
-            self.ftComponentLabel.setPixmap(pixmap)
-
-        parent = self.find_parent_window()
-        parent.real_time_mix()
-        if parent.region_size.isChecked():
-            parent.draw_rectangle( parent.viewers ,parent.region)
+    # ------------------------------------------------------------- Frequency Label Functions 
 
     def convert_from_pil_to_qimage(self, pilImage):
             img_data = pilImage.tobytes()
@@ -1192,14 +1182,9 @@ class ImageViewerWidget(ModernWindow):
 
     def convert_data_to_image(self, imageData):
         try:
-            height, width, channel = imageData.shape
-            bytesPerLine = 3 * width
-            qImg = QtGui.QImage(imageData.data, width, height, bytesPerLine, QtGui.QImage.Format_RGB888)
-            if qImg is None:
-                print("Error in converting image data to QImage")
-            qImg = qImg.rgbSwapped()
-            grayscale_qImg = qImg.convertToFormat(QtGui.QImage.Format_Grayscale8)
-            return grayscale_qImg
+            height, width = imageData.shape
+            qImg = QtGui.QImage(imageData.data, width, height, QtGui.QImage.Format_Grayscale8)
+            return qImg
         except Exception as e:
             print(e)
 
@@ -1209,8 +1194,11 @@ class ImageViewerWidget(ModernWindow):
             # Load image
             parent = self.find_parent_window()
             print("My Parent is ", parent)
-            self.image, self.imageData = self.loadImage(parent)
+            self.imageData = self.loadImage(parent)
+            
+            
             self.qImage = self.convert_data_to_image(self.imageData)
+            print(self.qImage)
             if self.qImage is None or self.imageData is None:
                 raise Exception("Failed to load image")
             print("Image Loaded")
@@ -1225,8 +1213,10 @@ class ImageViewerWidget(ModernWindow):
                 aspectRatioMode=Qt.AspectRatioMode.IgnoreAspectRatio
             )
             self.originalImageLabel.setPixmap(pixmapImage)
-            self.imageFourierTransform(self.imageData)                
+
+            print("Image Displayed")
             self.displayFrequencyComponent("FT Magnitude")
+            print("Displayed")
             parent.real_time_mix()
 
         except Exception as e:
