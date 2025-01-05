@@ -57,8 +57,11 @@ https://github.com/user-attachments/assets/f85c529e-3b82-441c-ba72-cf4bb9d70742
 #### **4. Scenario Management**
 - **Predefined Scenarios**: Simulate preconfigured scenarios such as:
   - **5G Communications**: Base station array configurations.
+![5G](images/5G.png)
   - **Medical Ultrasound**: Probe geometry and beam characteristics.
+![US](images/US.png)
   - **Tumor Ablation**: Ablation-specific arrays for targeted regions.
+![Tumor](images/tumor.png)
 - **Custom Scenarios**: Save, load, and fine-tune configurations with parameter files.
 
 
