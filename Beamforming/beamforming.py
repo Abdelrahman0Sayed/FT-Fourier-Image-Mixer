@@ -922,7 +922,7 @@ class BeamformingSimulator(QMainWindow):
                             "curvature_factor": 1.5,
                             "operating_freqs": [0.5],
                             "x_pos": 0,
-                            "y_pos": 0 
+                            "y_pos": 0
                         }
                     ]
                 }

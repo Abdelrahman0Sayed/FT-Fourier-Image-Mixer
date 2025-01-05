@@ -24,10 +24,19 @@ This project combines two distinct yet fundamental applications:
 - **Weighted FT Mixing**: Combine the Fourier transforms of all four images with customizable weights (using sliders) for magnitude and phase or real and imaginary components.
 - **Region Selection**: Select and emphasize inner (low frequency) or outer (high frequency) regions of the FT using interactive rectangular tools. These selections are synchronized across all images.
 
+##### Magnitude/Phase Mixing
+![mag_phase_mix](mix1.png)
+
+##### Real/Imaginary Mixing
+![real_img_mix](real_img_mix.png)
+
 #### **3. Real-Time Processing**
 - **iFFT Reconstruction**: Perform inverse Fourier transform (iFFT) for visualization of results in designated output viewports.
 - **Threaded Operations**: Cancel ongoing operations and restart with new settings to ensure smooth real-time adjustments.
 - **Progress Bar**: Visual feedback for long-running processes.
+
+##### **Demo**
+https://github.com/user-attachments/assets/f85c529e-3b82-441c-ba72-cf4bb9d70742
 
 ---
 
