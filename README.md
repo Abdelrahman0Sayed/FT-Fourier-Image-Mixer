@@ -25,10 +25,10 @@ This project combines two distinct yet fundamental applications:
 - **Region Selection**: Select and emphasize inner (low frequency) or outer (high frequency) regions of the FT using interactive rectangular tools. These selections are synchronized across all images.
 
 ##### Magnitude/Phase Mixing
-![mag_phase_mix](mix1.png)
+![mag_phase_mix](images/mix1.png)
 
 ##### Real/Imaginary Mixing
-![real_img_mix](real_img_mix.png)
+![real_img_mix](images/real_img_mix.png)
 
 #### **3. Real-Time Processing**
 - **iFFT Reconstruction**: Perform inverse Fourier transform (iFFT) for visualization of results in designated output viewports.
